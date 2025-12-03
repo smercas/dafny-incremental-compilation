@@ -14,7 +14,7 @@ using Microsoft.Boogie;
 
 namespace Microsoft.Dafny;
 
-class CheckTypeInferenceVisitor : ASTVisitor<TypeInferenceCheckingContext> {
+public class CheckTypeInferenceVisitor : ASTVisitor<TypeInferenceCheckingContext> {
   private readonly ModuleResolver resolver;
 
   public CheckTypeInferenceVisitor(ModuleResolver resolver) {

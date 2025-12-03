@@ -1,16 +1,17 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-using System.CommandLine;
-using System.Linq;
-using System.Reactive.Subjects;
-using System.Threading;
-using System.Threading.Tasks;
 using DafnyCore;
 using DafnyCore.Options;
 using DafnyDriver.Commands;
 using Microsoft.Boogie;
 using Microsoft.Dafny.Compilers;
+using System;
+using System.Collections.Generic;
+using System.CommandLine;
+using System.Linq;
+using System.Reactive.Subjects;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Microsoft.Dafny;
 
@@ -72,6 +73,32 @@ public static class VerifyCommand {
       var verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
       var proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
       var verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
+      compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
+      await verificationSummarized;
+      await verificationResultsLogged;
+      await proofDependenciesReported;
+      var L = resolution.ResolvedProgram.DefaultModuleDef.DefaultClass!.Members.OfType<Lemma>().First(m => m.Name == "L")!;
+      L.Body!.Body.Add(new AssertStmt(SourceOrigin.NoToken,
+        new BinaryExpr(SourceOrigin.NoToken, BinaryExpr.Opcode.Eq,
+          new LiteralExpr(SourceOrigin.NoToken, 0),
+          new LiteralExpr(SourceOrigin.NoToken, 0)
+        //new LiteralExpr(SourceOrigin.NoToken, true
+        ), null, null)
+      );
+      var resolver = new ModuleResolver(new ProgramResolver(resolution.ResolvedProgram), resolution.ResolvedProgram.DefaultModule.Options);
+      L.Body!.Body[^1].GenResolve(resolver, ResolutionContext.FromCodeContext(L));
+      resolver.SolveAllTypeConstraints();
+      var visitor = new CheckTypeInferenceVisitor(resolver);
+      typeof(CheckTypeInferenceVisitor).GetMethod("VisitStatement", BindingFlags.Instance | BindingFlags.NonPublic)!
+                                       .Invoke(visitor, [L.Body!.Body[^1], visitor.GetContext(L, false)]);
+      await compilation.Compilation.Cancel(L.Origin.GetFilePosition());
+
+      verificationResults = new();
+
+      ReportVerificationDiagnostics(compilation, verificationResults);
+      verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
+      proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
+      verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
       compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
       await verificationSummarized;
       await verificationResultsLogged;

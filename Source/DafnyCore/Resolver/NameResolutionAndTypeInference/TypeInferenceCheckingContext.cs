@@ -1,6 +1,6 @@
 namespace Microsoft.Dafny;
 
-class TypeInferenceCheckingContext : IASTVisitorContext {
+public class TypeInferenceCheckingContext : IASTVisitorContext {
   private readonly IASTVisitorContext astVisitorContext;
 
   public bool IsPrefixPredicate => astVisitorContext is PrefixPredicate;
