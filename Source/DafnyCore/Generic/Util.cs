@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Microsoft.Boogie;
 using static Microsoft.Dafny.GenericErrors;
+using System.Diagnostics;
 
 
 namespace Microsoft.Dafny {
@@ -24,6 +25,70 @@ namespace Microsoft.Dafny {
   }
 
   public static class Util {
+#nullable enable
+    public static R? ApplyIFNotNull<T, R>(this T? t, Func<T, R> f) where R : class => t is null ? null : f(t);
+    public static IEnumerable<T?> MappedToNulls<T>(this IEnumerable<T> es) where T : class => es.Select<T, T?>(static _ => null);
+    #region Task.Then
+    public static Task<T> Then<T>(this Task<T> t, Action<T> transformation) => t.ContinueWith(_t => {
+      var r = _t.Result;
+      transformation(r);
+      return r;
+    }, default, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+    public static Task<R> Then<T, R>(this Task<T> t, Func<T, R> transformation) => t.ContinueWith(_t => {
+      return transformation(_t.Result);
+    }, default, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+    public static Task<T> Then<T>(this Task<T> t, Func<T, Task> transformation) => t.ContinueWith(async _t => {
+      var r = await _t;
+      await transformation(r);
+      return r;
+    }, default, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default).Unwrap();
+    public static Task<R> Then<T, R>(this Task<T> t, Func<T, Task<R>> transformation) => t.ContinueWith(async _t => {
+      return await transformation(await _t);
+    }, default, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default).Unwrap();
+    public static Task<T> Then<T>(this Task<T> t, System.Action continuation) => t.ContinueWith(_t => {
+      var r = _t.Result;
+      continuation();
+      return r;
+    }, default, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+    public static Task<(T, R)> Then<T, R>(this Task<T> t, Func<R> continuation) => t.ContinueWith(_t => {
+      return (_t.Result, continuation());
+    }, default, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+    public static Task<T> Then<T>(this Task<T> t, Func<Task> continuation) => t.ContinueWith(async _t => {
+      var r = await _t;
+      await continuation();
+      return r;
+    }, default, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default).Unwrap();
+    public static Task<(T, R)> Then<T, R>(this Task<T> t, Func<Task<R>> continuation) => t.ContinueWith(async _t => {
+      return (await _t, await continuation());
+    }, default, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default).Unwrap();
+    #endregion
+    public static void ForEachInPhases<T>(this IEnumerable<T> es, Action<T> pre, params (Predicate<T> when, Action<T> on, Action<T> after)[] post) {
+      if (post.Length == 0) {
+        es.ForEach(pre);
+        return;
+      }
+      using var enumerator = es.GetEnumerator();
+      if (!enumerator.MoveNext()) {
+        // `es` doesn't have any elements
+        return;
+      }
+      // `enumerator` is at the first element of `es`
+      IEnumerable<(Predicate<T>, Action<T>)> phaseSepsarators =
+        [..post.Select(p => (p.when, p.on)), (static _ => false, static _ => throw new UnreachableException())];
+      foreach (var ((when, on), action) in phaseSepsarators.Zip([pre, ..post.Select(p => p.after)])) {
+        while (!when(enumerator.Current)) {
+          action(enumerator.Current);
+          if (!enumerator.MoveNext()) {
+            return;
+          }
+        }
+        on(enumerator.Current);
+        if (!enumerator.MoveNext()) {
+          return;
+        }
+      }
+    }
+#nullable disable
 
     public static IEnumerable<T> IgnoreNulls<T>(params T[] values) {
       var result = new List<T>();

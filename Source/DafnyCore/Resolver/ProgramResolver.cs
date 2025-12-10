@@ -11,7 +11,7 @@ namespace Microsoft.Dafny;
 public class ProgramResolver {
   public Program Program { get; }
 
-  private readonly Dictionary<TopLevelDeclWithMembers, Dictionary<string, MemberDecl>> classMembers = new();
+  protected readonly Dictionary<TopLevelDeclWithMembers, Dictionary<string, MemberDecl>> classMembers = new();
 
   protected readonly Graph<ModuleDecl> dependencies = new();
   public DafnyOptions Options => Program.Options;
@@ -88,7 +88,7 @@ public class ProgramResolver {
     classMembers[topLevelDeclWithMembers] = memberDictionary;
   }
 
-  private void ProcessDeclarationResolutionResult(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, ModuleDecl decl,
+  protected void ProcessDeclarationResolutionResult(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, ModuleDecl decl,
     ModuleResolutionResult moduleResolutionResult) {
     moduleDeclarationPointers[decl](moduleResolutionResult.ResolvedDeclaration);
 
@@ -108,7 +108,7 @@ public class ProgramResolver {
   /// <summary>
   /// We determine where pointers to module declarations occur, and store those so caching can later set those.
   /// </summary>
-  private void ComputeModuleDependencyGraph(Program program, out Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers) {
+  protected void ComputeModuleDependencyGraph(Program program, out Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers) {
     var startingErrorCount = Reporter.ErrorCount;
     var rootBindings = new ModuleBindings(null);
     // TODO can we delete rootBindings and pass null instead?
@@ -173,7 +173,7 @@ public class ProgramResolver {
     return moduleResolver.ResolveModuleDeclaration(compilation, decl);
   }
 
-  private static void SetHeights(IEnumerable<ModuleDecl> sortedDecls) {
+  protected static void SetHeights(IEnumerable<ModuleDecl> sortedDecls) {
     foreach (var withIndex in sortedDecls.Zip(Enumerable.Range(0, int.MaxValue))) {
       var md = withIndex.First;
       md.Height = withIndex.Second;
@@ -190,7 +190,7 @@ public class ProgramResolver {
   /// This could happen if they are given the same name using the 'extern' declaration modifier.
   /// </summary>
   /// <param name="program">The Dafny program being compiled.</param>
-  private void CheckDuplicateModuleNames(Program program) {
+  protected void CheckDuplicateModuleNames(Program program) {
     // Check that none of the modules have the same CompileName.
     Dictionary<string, ModuleDefinition> compileNameMap = new Dictionary<string, ModuleDefinition>();
     foreach (ModuleDefinition m in program.CompileModules) {

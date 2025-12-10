@@ -4,6 +4,9 @@ using Microsoft.Extensions.Logging;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Dafny.LanguageServer.Workspace;
+using System.Diagnostics.Contracts;
+using Namotion.Reflection;
+using System.Linq;
 
 namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
   /// <summary>
@@ -14,6 +17,11 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
   /// this resolver serializes all invocations.
   /// </remarks>
   public class DafnyLangSymbolResolver : ISymbolResolver {
+    // TODO: bring this in line with the language at large or rewrite how modifications are passed
+    public static readonly Option<IncCompModification?> IncrementalCompilationModification = new("--incremental-compilation-modification", () => null, 
+      "compile based on previous compilation results and a provided modification") {
+      IsHidden = true
+    };
 
     public static readonly Option<bool> UseCaching = new("--use-caching", () => true,
       "Use caching to speed up analysis done by the Dafny IDE after each text edit.") {
@@ -45,12 +53,23 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
       }
     }
 
+    //for some reason this doesn't get preserved like the cache does, so we'll make it static for now
+    static private ProgramResolver? resolver;
+
     private async Task RunDafnyResolver(Compilation compilation, Program program, CancellationToken cancellationToken) {
       var beforeResolution = DateTime.Now;
       try {
-        var resolver = program.Options.Get(UseCaching)
-          ? new CachingResolver(program, innerLogger, telemetryPublisher, resolutionCache)
-          : new ProgramResolver(program);
+        if (program.Options.Options.OptionArguments.ContainsKey(IncrementalCompilationModification)) {
+          Contract.Assert(resolver is null or IncrementalResolver);
+          resolver = (resolver is null) switch {
+            true => new InitialIncrementalResolver(program),
+            false => new SubsequentIncrementalResolver(program, (resolver as IncrementalResolver)!, program.Options.Get(IncrementalCompilationModification)),
+          };
+        } else if (program.Options.Get(UseCaching)) {
+          resolver = new CachingResolver(program, innerLogger, telemetryPublisher, resolutionCache);
+        } else {
+          resolver = new ProgramResolver(program);
+        }
         await resolver.Resolve(cancellationToken);
         if (compilation.HasErrors) {
           logger.LogDebug($"encountered errors while resolving {compilation.Project.Uri}");
