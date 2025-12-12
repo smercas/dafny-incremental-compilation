@@ -18,7 +18,7 @@ public class ServerCommand {
     OptionRegistry.RegisterOption(GhostStateDiagnosticCollector.GhostIndicators, OptionScope.Cli);
     OptionRegistry.RegisterOption(GutterIconAndHoverVerificationDetailsManager.LineVerificationStatus, OptionScope.Cli);
     OptionRegistry.RegisterOption(LanguageServer.VerifySnapshots, OptionScope.Cli);
-    OptionRegistry.RegisterOption(DafnyLangSymbolResolver.UseCaching, OptionScope.Cli);
+    OptionRegistry.RegisterOption(DafnyLangSymbolResolver.CachingType, OptionScope.Cli);
     OptionRegistry.RegisterOption(ProjectManager.UpdateThrottling, OptionScope.Cli);
     OptionRegistry.RegisterOption(ProjectManager.ReuseSolvers, OptionScope.Cli);
     OptionRegistry.RegisterOption(LegacySignatureAndCompletionTable.MigrateSignatureAndCompletionTable, OptionScope.Cli);

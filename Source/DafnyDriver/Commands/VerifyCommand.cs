@@ -64,7 +64,7 @@ public static class VerifyCommand {
     if (options.Get(CommonOptionBag.VerificationCoverageReport) != null) {
       options.TrackVerificationCoverage = true;
     }
-    options.Set(DafnyLangSymbolResolver.IncrementalCompilationModification, null); // value doesn't matter
+    options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(null)); // value doesn't matter
     var compilation = CliCompilation.Create(options);
     compilation.Start();
 
@@ -118,10 +118,12 @@ public static class VerifyCommand {
     Console.WriteLine($"Verification took an additional {DateTime.Now - afterFirstResolution}");
     var beforeSecondComp = DateTime.Now;
     options.Set(
-      DafnyLangSymbolResolver.IncrementalCompilationModification,
-      new AppendStatementToMethod((await compilation.Resolution)!.CanVerifies![(await compilation.Compilation.RootFiles).First().Uri]
-                                                                 .Values.OfType<Lemma>()
-                                                                 .First(l => l is { Body: { }, Name: "n_is_multiple_of_3_if_fib_n_is_even", } ))
+      DafnyLangSymbolResolver.CachingType,
+      new DafnyLangSymbolResolver.CachingMode.Incremental(
+        new AppendStatementToMethod((await compilation.Resolution)!
+                                      .CanVerifies![(await compilation.Compilation.RootFiles)[0].Uri]
+                                      .Values.OfType<Lemma>()
+                                      .First(l => l is { Body: { }, Name: "n_is_multiple_of_3_if_fib_n_is_even", } )))
     );
     compilation = CliCompilation.Create(options);
     compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {

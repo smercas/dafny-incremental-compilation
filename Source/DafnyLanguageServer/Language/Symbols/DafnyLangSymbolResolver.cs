@@ -7,6 +7,7 @@ using Microsoft.Dafny.LanguageServer.Workspace;
 using System.Diagnostics.Contracts;
 using Namotion.Reflection;
 using System.Linq;
+using System.Diagnostics;
 
 namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
   /// <summary>
@@ -17,16 +18,35 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
   /// this resolver serializes all invocations.
   /// </remarks>
   public class DafnyLangSymbolResolver : ISymbolResolver {
-    // TODO: bring this in line with the language at large or rewrite how modifications are passed
-    public static readonly Option<IncCompModification?> IncrementalCompilationModification = new("--incremental-compilation-modification", () => null, 
-      "compile based on previous compilation results and a provided modification") {
+    public abstract record CachingMode {
+      public sealed record None : CachingMode;
+      public sealed record HashBased : CachingMode;
+      public sealed record Incremental(IncCompModification? Modification) : CachingMode;
+      public static CachingMode Default() => new None();
+    }
+    public static readonly Option<CachingMode> CachingType = new(
+      name: "--caching-type",
+      description: "Caching mode: none, hash, or incremental.",
+      parseArgument: result => {
+        var token = result.Tokens[0].Value;
+        if (token.ToLowerInvariant() is not ("none" or "hash" or "incremental")) {
+          result.ErrorMessage = $"Invalid caching mode '{token}' (expected: none, hash or incremental)";
+          return CachingMode.Default();
+        }
+        return token.ToLowerInvariant() switch {
+          "none" => new CachingMode.None(),
+          "hash" => new CachingMode.HashBased(),
+          "incremental" => new CachingMode.Incremental(null),
+          _ => throw new UnreachableException()
+        };
+      }
+    ) {
+      Arity = ArgumentArity.ExactlyOne,
       IsHidden = true
     };
-
-    public static readonly Option<bool> UseCaching = new("--use-caching", () => true,
-      "Use caching to speed up analysis done by the Dafny IDE after each text edit.") {
-      IsHidden = true
-    };
+    static DafnyLangSymbolResolver() {
+      CachingType.SetDefaultValueFactory(static () => new CachingMode.HashBased()); // same semantics as before
+    }
 
     private readonly ILogger logger;
     private readonly ILogger<CachingResolver> innerLogger;
@@ -59,17 +79,14 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
     private async Task RunDafnyResolver(Compilation compilation, Program program, CancellationToken cancellationToken) {
       var beforeResolution = DateTime.Now;
       try {
-        if (program.Options.Options.OptionArguments.ContainsKey(IncrementalCompilationModification)) {
-          Contract.Assert(resolver is null or IncrementalResolver);
-          resolver = (resolver is null) switch {
-            true => new InitialIncrementalResolver(program),
-            false => new SubsequentIncrementalResolver(program, (resolver as IncrementalResolver)!, program.Options.Get(IncrementalCompilationModification)),
-          };
-        } else if (program.Options.Get(UseCaching)) {
-          resolver = new CachingResolver(program, innerLogger, telemetryPublisher, resolutionCache);
-        } else {
-          resolver = new ProgramResolver(program);
-        }
+        resolver = program.Options.Get(CachingType) switch {
+          CachingMode.None => new ProgramResolver(program),
+          CachingMode.HashBased => new CachingResolver(program, innerLogger, telemetryPublisher, resolutionCache),
+          CachingMode.Incremental when resolver is null => new InitialIncrementalResolver(program),
+          CachingMode.Incremental(var m) when resolver is IncrementalResolver incrementalResolver =>
+            new SubsequentIncrementalResolver(program, incrementalResolver!, m),
+          _ => throw new UnreachableException(),
+        };
         await resolver.Resolve(cancellationToken);
         if (compilation.HasErrors) {
           logger.LogDebug($"encountered errors while resolving {compilation.Project.Uri}");

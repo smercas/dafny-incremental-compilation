@@ -25,7 +25,7 @@ namespace Microsoft.Dafny.LanguageServer {
         GhostStateDiagnosticCollector.GhostIndicators,
         GutterIconAndHoverVerificationDetailsManager.LineVerificationStatus,
         VerifySnapshots,
-        DafnyLangSymbolResolver.UseCaching,
+        DafnyLangSymbolResolver.CachingType,
         ProjectManager.UpdateThrottling,
         CachingProjectFileOpener.ProjectFileCacheExpiry,
         DeveloperOptionBag.SplitPrint,

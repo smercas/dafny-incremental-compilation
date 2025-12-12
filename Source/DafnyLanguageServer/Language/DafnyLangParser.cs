@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using Microsoft.Dafny.LanguageServer.Workspace;
+using System.Diagnostics;
 
 namespace Microsoft.Dafny.LanguageServer.Language {
   /// <summary>
@@ -30,9 +31,12 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       this.fileSystem = fileSystem;
       this.telemetryPublisher = telemetryPublisher;
       this.logger = logger;
-      programParser = options.Get(DafnyLangSymbolResolver.UseCaching)
-        ? new CachingParser(innerParserLogger, fileSystem, telemetryPublisher)
-        : new ProgramParser(innerParserLogger, fileSystem);
+      programParser = options.Get(DafnyLangSymbolResolver.CachingType) switch {
+        DafnyLangSymbolResolver.CachingMode.None => new ProgramParser(innerParserLogger, fileSystem),
+        DafnyLangSymbolResolver.CachingMode.HashBased or DafnyLangSymbolResolver.CachingMode.Incremental =>
+          new CachingParser(innerParserLogger, fileSystem, telemetryPublisher),
+        _ => throw new UnreachableException()
+      };
     }
 
     public async Task<ProgramParseResult> Parse(Compilation compilation, CancellationToken cancellationToken) {
