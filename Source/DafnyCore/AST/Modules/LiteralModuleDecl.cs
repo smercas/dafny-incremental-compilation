@@ -39,8 +39,15 @@ public class LiteralModuleDecl : ModuleDecl, ICanFormat, IHasSymbolChildren {
 
   public LiteralModuleDecl(Cloner cloner, LiteralModuleDecl original, ModuleDefinition enclosingModule)
     : base(cloner, original, enclosingModule) {
-    var newModuleDefinition = cloner.CloneLiteralModuleDefinition ? cloner.CloneModuleDefinition(original.ModuleDef, enclosingModule) : original.ModuleDef;
-    ModuleDef = newModuleDefinition;
+    //var newModuleDefinition = cloner.CloneLiteralModuleDefinition ? cloner.CloneModuleDefinition(original.ModuleDef, enclosingModule) : original.ModuleDef;
+    //ModuleDef = newModuleDefinition;
+    if (cloner.CloneLiteralModuleDefinition) {
+      ModuleDef = cloner.CloneModuleDefinition(original.ModuleDef, enclosingModule);
+      ModuleDef.EnclosingLiteralModuleDecl = this;
+    } else {
+      // TODO: open an issue about what should happen in this case, since `ReferenceEquals(ModuleDef.EnclosingLiteralModuleDecl, this) == false`
+      ModuleDef = original.ModuleDef;
+    }
     DefaultExport = original.DefaultExport;
     BodyStartTok = ModuleDef.BodyStartTok;
   }
