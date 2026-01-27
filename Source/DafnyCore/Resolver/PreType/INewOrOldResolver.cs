@@ -3,6 +3,7 @@ using System.Collections.Generic;
 namespace Microsoft.Dafny;
 
 public interface INewOrOldResolver {
+  internal IEnumerable<Expression> ScopeArgsFrom(ResolutionContext context) => [];
 
   DafnyOptions Options { get; }
   ErrorReporter Reporter { get; }

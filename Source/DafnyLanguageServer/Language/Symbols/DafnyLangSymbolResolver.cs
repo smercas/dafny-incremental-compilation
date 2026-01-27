@@ -74,7 +74,8 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
     }
 
     //for some reason this doesn't get preserved like the cache does, so we'll make it static for now
-    static private ProgramResolver? resolver;
+    static private ProgramResolver? resolver = null;
+    //private ProgramResolver? resolver = null;
 
     private async Task RunDafnyResolver(Compilation compilation, Program program, CancellationToken cancellationToken) {
       var beforeResolution = DateTime.Now;

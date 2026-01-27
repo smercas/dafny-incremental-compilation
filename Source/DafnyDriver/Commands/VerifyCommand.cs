@@ -123,24 +123,20 @@ public static class VerifyCommand {
         new AppendStatementToMethod((await compilation.Resolution)!
                                       .CanVerifies![(await compilation.Compilation.RootFiles)[0].Uri]
                                       .Values.OfType<Lemma>()
-                                      .First(l => l is { Body: { }, Name: "n_is_multiple_of_3_if_fib_n_is_even", } )))
+                                      .First(l => l is { Body: not null, Name: "_IPM_m", } )))
     );
     compilation = CliCompilation.Create(options);
     compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
       foreach (var file in files) {
         var contents = file.GetContent().Reader.ReadToEnd();
-        const string expressionToAssert = "fib(n) % 2 != 0";
-        // for the sake fo this example, we assume that:
-        //   - there's one file
-        //   - that one file's last item is a module
-        //   - that module's last item is a method
-        //   - the end of the module is followed by a newline (mostly bcs of formatting)
-        // it is enough to modify file.GetContent as such
+        string expressionToAssert = "0 == 1";
+        //string expressionToAssert = DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(new LiteralExpr(SourceOrigin.NoToken, true), DafnyCore.IncrementalCompilation.ProtectorFunctions.Protect).ToString();
         file.GetContent = () => {
-          if (contents.LastIndexOf("}") is var pos and not -1) {
-            var newline = contents[(pos + 1)..];
-            contents = contents.Insert(pos - newline.Length - 3, $"    assert {expressionToAssert};{newline}");
-          } else { Contract.Assert(false); }
+          var body = ((options.Get(DafnyLangSymbolResolver.CachingType)
+                        as DafnyLangSymbolResolver.CachingMode.Incremental)!.Modification!
+                        as AppendStatementToMethod)!.Method.Body!;
+          var endOfBody = contents.Split("\r\n")[..(body.EndToken.line)].Sum(s => s.Length) - 1 + body.EndToken.col - 1; // position of the `}` character
+          contents = contents.Insert(endOfBody, $"assert {expressionToAssert}; ");
           return new FileSnapshot(new StringReader(contents), null);
         };
       }

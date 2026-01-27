@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -28,6 +29,11 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     Type.ResetScopes();
 
     Type.EnableScopes();
+
+    var moduleWithOldRootStuff = new ModuleSplitter(Options).Split(Program);
+    AddProtectorsModule();
+    new ProtectorsImporter(Options).ImportIn(moduleWithOldRootStuff);
+
     // For the formatter, we ensure we take snapshots of the PrefixNamedModules and topleveldecls
     Program.DefaultModuleDef.PreResolveSnapshotForFormatter();
 
@@ -78,6 +84,13 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
       rewriter.PostResolve(Program);
     }
     return Task.CompletedTask;
+  }
+  protected void AddProtectorsModule() {
+    var def = new ModuleDefinition(SourceOrigin.NoToken, new(ProtectorFunctions.ContainingModuleName), [], ModuleKindEnum.Concrete, null, Program.DefaultModuleDef, null, []);
+    var decl = new LiteralModuleDecl(Options, def, Program.DefaultModuleDef, Guid.NewGuid());
+    def.DefaultClass!.Members.AddRange(ProtectorFunctions.All.Select(pf => pf.Function));
+    def.DefaultClass!.SetMembersBeforeResolution();
+    Program.DefaultModuleDef.SourceDecls.Insert(0, decl);
   }
   protected abstract void ResolveSystemModule();
   protected abstract void ResolveSortedDecls(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, CancellationToken cancellationToken);

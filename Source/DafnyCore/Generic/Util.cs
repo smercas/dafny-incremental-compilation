@@ -27,6 +27,26 @@ namespace Microsoft.Dafny {
   public static class Util {
 #nullable enable
     public static R? ApplyIFNotNull<T, R>(this T? t, Func<T, R> f) where R : class => t is null ? null : f(t);
+    public static Name ToNameNodeWithVirtualToken(this string s) => new(new Token() { val = s }, s);
+    public static bool None<T>(this IEnumerable<T> es) => !es.Any();
+    public static bool None<T>(this IEnumerable<T> es, Func<T, bool> f) => !es.Any(f);
+    public static bool NoneAreOfType<E>(this IEnumerable es) => es.OfType<E>().None();
+    public static IEnumerable<T> IgnoreNulls<T>(this IEnumerable<T?> es) { foreach (var e in es) { if (e is null) { continue; } yield return e; } }
+    public static IEnumerable<T> Concat<T>(params IEnumerable<T>[] ees) {
+      foreach (var es in ees) {
+        foreach (var e in es) {
+          yield return e;
+        }
+      }
+    }
+    public static IEnumerable<R> SelectWhere<T, R>(this IEnumerable<T> es, Func<T, (bool, R)> f) {
+      foreach (var e in es) {
+        (bool not_filtered_out, R result) = f(e);
+        if (!not_filtered_out) { continue; }
+        yield return result;
+      }
+    }
+    public static R? ApplyIfNotNull<T, R>(this T? t, Func<T, R> f) where R : class => t is null ? null : f(t);
     public static IEnumerable<T?> MappedToNulls<T>(this IEnumerable<T> es) where T : class => es.Select<T, T?>(static _ => null);
     #region Task.Then
     public static Task<T> Then<T>(this Task<T> t, Action<T> transformation) => t.ContinueWith(_t => {

@@ -6201,12 +6201,16 @@ namespace Microsoft.Dafny {
       return rr;
     }
 
+    IEnumerable<Expression> INewOrOldResolver.ScopeArgsFrom(ResolutionContext context) {
+      return Scope.Names.IgnoreNulls().Distinct().Select(s => DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(s, DafnyCore.IncrementalCompilation.ProtectorFunctions.ProtectScope));
+    }
     public MethodCallInformation ResolveApplySuffix(ApplySuffix e, ResolutionContext resolutionContext, bool allowMethodCall) {
       Contract.Requires(e != null);
       Contract.Requires(resolutionContext != null);
       Contract.Ensures(Contract.Result<MethodCallInformation>() == null || allowMethodCall);
       Expression r = null;  // upon success, the expression to which the ApplySuffix resolves
       var errorCount = reporter.Count(ErrorLevel.Error);
+      (e as DafnyCore.IncrementalCompilation.ProtectToProveApplySuffix)?.AddScopeArgs(this, resolutionContext);
       if (e.Lhs is NameSegment) {
         r = ResolveNameSegment((NameSegment)e.Lhs, true, e.Bindings.ArgumentBindings, resolutionContext, allowMethodCall);
         // note, if r is non-null, then e.Args have been resolved and r is a resolved expression that incorporates e.Args

@@ -82,8 +82,8 @@ namespace Microsoft.Dafny.LanguageServer {
     /// As part of the LSP spec, a language server must kill itself if its parent process dies
     /// https://github.com/microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-16.md?plain=1#L1713
     /// </summary>
-    private static void KillLanguageServerIfParentDies(ILogger<LanguageServer> logger, InitializeParams request,
-        Action killLanguageServer) {
+    public static void KillLanguageServerIfParentDies<Server>(ILogger<Server> logger, InitializeParams request,
+        Action killLanguageServer) where Server : IServer<Server> {
       if (!(request.ProcessId >= 0)) {
         return;
       }

@@ -20,7 +20,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
       
     <!-- Locking down versions that would otherwise be downgraded -->
-    <PackageReference Include="System.Security.Principal.Windows" Version="4.6.0" />
+    <PackageReference Include="System.Security.Principal.Windows" Version="5.0.0" />
     <PackageReference Include="System.Collections" Version="4.3.0" />
     <PackageReference Include="System.Diagnostics.Debug" Version="4.3.0" />
     <PackageReference Include="System.IO.FileSystem.Primitives" Version="4.3.0" />
@@ -32,7 +32,8 @@
     
   <ItemGroup>
     <ProjectReference Include="..\DafnyCore\DafnyCore.csproj" />
-    <ProjectReference Include="..\DafnyLanguageServer\DafnyLanguageServer.csproj" />
+		<ProjectReference Include="..\DafnyLanguageServer\DafnyLanguageServer.csproj" />
+		<ProjectReference Include="..\DafnyIncrementalCompilationServer\DafnyIncrementalCompilation.csproj" />
     <ProjectReference Include="..\DafnyTestGeneration\DafnyTestGeneration.csproj" />
   </ItemGroup>
   

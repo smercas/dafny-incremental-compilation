@@ -1,4 +1,10 @@
 #nullable enable
+using DafnyCore;
+using DafnyDriver.Commands;
+using Microsoft.Boogie;
+using Microsoft.Dafny.Compilers;
+using Microsoft.Dafny.IncrementalCompilation;
+using Microsoft.Dafny.LanguageServer;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -12,11 +18,6 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using DafnyCore;
-using DafnyDriver.Commands;
-using Microsoft.Boogie;
-using Microsoft.Dafny.Compilers;
-using Microsoft.Dafny.LanguageServer;
 
 namespace Microsoft.Dafny;
 
@@ -40,6 +41,7 @@ public static class DafnyNewCli {
     AddCommand(DocCommand.Create());
     AddCommand(MeasureComplexityCommand.Create());
     AddCommand(ServerCommand.Instance);
+    AddCommand(IncrementalCompilationServerCommand.Instance);
     AddCommand(TestCommand.Create());
     AddCommand(GenerateTestsCommand.Create());
     AddCommand(DeadCodeCommand.Create());
