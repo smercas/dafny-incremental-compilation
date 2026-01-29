@@ -135,7 +135,8 @@ public static class VerifyCommand {
           var body = ((options.Get(DafnyLangSymbolResolver.CachingType)
                         as DafnyLangSymbolResolver.CachingMode.Incremental)!.Modification!
                         as AppendStatementToMethod)!.Method.Body!;
-          var endOfBody = contents.Split("\r\n")[..(body.EndToken.line)].Sum(s => s.Length) - 1 + body.EndToken.col - 1; // position of the `}` character
+          const string endl = "\r\n";
+          var endOfBody = contents.Split(endl)[..(body.EndToken.line - 1)].Sum(s => s.Length + endl.Length) + body.EndToken.col - 1; // position just before `}` character that closes the method body
           contents = contents.Insert(endOfBody, $"assert {expressionToAssert}; ");
           return new FileSnapshot(new StringReader(contents), null);
         };

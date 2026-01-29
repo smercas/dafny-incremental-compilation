@@ -13,12 +13,13 @@ namespace DafnyCore.IncrementalCompilation {
   internal class ModuleSplitter(DafnyOptions dafnyOptions) {
     private DafnyOptions DafnyOptions => dafnyOptions;
     public static readonly string Name = "_IPM";
+    public static readonly string AttributeName = "ipm";
     public LiteralModuleDecl Split(Microsoft.Dafny.Program p) {
       Contract.Requires(p.DefaultModuleDef.SourceDecls.NoneAreOfType<ModuleExportDecl>()); // parser doesn't allow export decls in root module
       static LiteralModuleDecl MakeNewModuleWithOldRootStuff(ModuleSplitter self, Microsoft.Dafny.Program p) {
         var def = new ModuleDefinition(
           p.DefaultModuleDef.Origin,
-          new(Name),
+          Name.ToNameNodeWithVirtualToken(),
           [],
           ModuleKindEnum.Abstract,
           null,
@@ -185,22 +186,37 @@ namespace DafnyCore.IncrementalCompilation {
       bool canHaveConstructors = dcd is ClassDecl or TraitDecl;
       foreach (var member in dcd.Members) {
         switch (member) {
-          case ConstantField cf: if (cf.Rhs is not null) {
+          case ConstantField { Rhs: var e and not null, Attributes: var attrs } cf when HasAttr(attrs) || HasAttr(e):
             yield return new RefiningModuleGenerator.FromMemberDecl<E, ConstantField>(dcd, cf);
-          } break;
-          case Field f: break;
-          case Microsoft.Dafny.Function f: if (f.Body is not null) {
-            yield return new RefiningModuleGenerator.FromMemberDecl<E, Microsoft.Dafny.Function>(dcd, f);
-          } break;
-          case Method m: if (m.Body is not null) {
-            yield return new RefiningModuleGenerator.FromMemberDecl<E, Method>(dcd, m);
-          } break;
-          case Constructor c when canHaveConstructors: if (c.Body is not null) {
-            yield return new RefiningModuleGenerator.FromMemberDecl<E, Constructor>(dcd, c);
-          } break;
-          default: throw new UnreachableException();
+            break;
+          case ConstantField: break;
+          case Field: break;
+          case MethodOrFunction m_or_f:
+            var attr_in_contract = m_or_f.Req.Any(HasAttr) || m_or_f.Ens.Any(HasAttr);
+            switch (m_or_f) {
+              case Microsoft.Dafny.Function { Body: not null } f when attr_in_contract || HasAttr(f.Body):
+                yield return new RefiningModuleGenerator.FromMemberDecl<E, Microsoft.Dafny.Function>(dcd, f);
+                break;
+              case Microsoft.Dafny.Function: break;
+              case MethodOrConstructor { Body: not null } m_or_c when attr_in_contract || m_or_c.Body.Body.Any(HasAttr):
+                yield return m_or_c switch {
+                  Method m => new RefiningModuleGenerator.FromMemberDecl<E, Method>(dcd, m),
+                  Constructor c => new RefiningModuleGenerator.FromMemberDecl<E, Constructor>(dcd, c),
+                  _ => throw new UnreachableException(),
+                };
+                break;
+              case MethodOrConstructor: break;
+              default: throw new UnreachableException();
+            }
+            break;
+          default:
+            throw new UnreachableException();
         }
       }
     }
+    public static bool HasAttr(Attributes? attrs) => Attributes.Contains(attrs, AttributeName);
+    public static bool HasAttr(Expression e) => e.PreResolveSubStatements().OfType<AssertStmt>().Any(assertStmt => HasAttr(assertStmt.Attributes));
+    public static bool HasAttr(Statement s) => s.PreResolveSubStatements().OfType<AssertStmt>().Any(assertStmt => HasAttr(assertStmt.Attributes));
+    public static bool HasAttr(AttributedExpression ae) => HasAttr(ae.Attributes) || HasAttr(ae.E);
   }
 }

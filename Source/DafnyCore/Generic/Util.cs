@@ -1,20 +1,21 @@
 // Copyright by the contributors to the Dafny Project
 // SPDX-License-Identifier: MIT
+using DAST;
+using JetBrains.Annotations;
+using Microsoft.Boogie;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.IO;
+using System.Linq;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using JetBrains.Annotations;
-using Microsoft.Boogie;
 using static Microsoft.Dafny.GenericErrors;
-using System.Diagnostics;
 
 
 namespace Microsoft.Dafny {
@@ -26,7 +27,28 @@ namespace Microsoft.Dafny {
 
   public static class Util {
 #nullable enable
-    public static R? ApplyIFNotNull<T, R>(this T? t, Func<T, R> f) where R : class => t is null ? null : f(t);
+
+    public static IEnumerable<Statement> PreResolveSubStatements(this Expression e) => e switch {
+      StmtExpr se => Concat(se.S.PreResolveSubStatements(), se.E.PreResolveSubStatements()),
+      ConcreteSyntaxExpression cse => cse.PreResolveSubExpressions.SelectMany(PreResolveSubStatements),
+      DatatypeValue dv => dv.Bindings.ArgumentBindings.SelectMany(ab => ab.Actual.PreResolveSubStatements()),
+      _ => e.SubExpressions.SelectMany(PreResolveSubStatements),
+    };
+    public static IEnumerable<Statement> PreResolveSubStatements(this Statement s) =>
+      Concat([s], s.PreResolveSubStatements.SelectMany(PreResolveSubStatements), s.PreResolveSubExpressions.SelectMany(PreResolveSubStatements));
+
+    public static IEnumerable<Expression> PreResolveSubExpressions(this Expression e) => Concat([e], e switch {
+      StmtExpr se => Concat(se.S.PreResolveSubExpressions(), se.E.PreResolveSubExpressions()),
+      ConcreteSyntaxExpression cse => cse.PreResolveSubExpressions.SelectMany(PreResolveSubExpressions),
+      DatatypeValue dv => dv.Bindings.ArgumentBindings.SelectMany(ab => ab.Actual.PreResolveSubExpressions()),
+      _ => e.SubExpressions.SelectMany(PreResolveSubExpressions),
+    });
+
+    public static IEnumerable<Expression> PreResolveSubExpressions(this Statement s) =>
+      Concat(s.PreResolveSubStatements.SelectMany(PreResolveSubExpressions), s.PreResolveSubExpressions.SelectMany(PreResolveSubExpressions));
+
+    public static bool All(this IEnumerable<bool> es) => es.All(e => e);
+
     public static Name ToNameNodeWithVirtualToken(this string s) => new(new Token() { val = s }, s);
     public static bool None<T>(this IEnumerable<T> es) => !es.Any();
     public static bool None<T>(this IEnumerable<T> es, Func<T, bool> f) => !es.Any(f);
