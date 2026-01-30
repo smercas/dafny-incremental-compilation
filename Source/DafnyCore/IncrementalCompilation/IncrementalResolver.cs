@@ -1,6 +1,7 @@
 ﻿#nullable enable
 using DafnyCore.IncrementalCompilation;
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
@@ -169,23 +170,23 @@ public class SubsequentIncrementalResolver(Program program, ResolutionCache prev
     
     bool IsAffectedModuleDecl((ModuleDecl _, ModuleDecl Prev) decls) => ReferenceEquals(amd.Old, decls.Prev);
     
+    FrozenSet<ModuleDecl>? dependants = null;
     void ResolveAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) => GenericResolution(decls, (curr, prev) => {
       amd.NewlyProcessed = curr;
+      dependants = RecursiveDependantsOf(amd.NewlyProcessed).ToFrozenSet();
       return new ModuleResolver(this, curr.Options).ResolveModuleDeclaration(Program.Compilation, curr/*, prev*/);
     });
-    
-    IEnumerable<ModuleDecl> RecursiveDependenciesOf(ModuleDecl m) {
+    IEnumerable<ModuleDecl> RecursiveDependantsOf(ModuleDecl m) {
       Contract.Requires(dependencies.FindVertex(m) is not null);
-      var v = dependencies.FindVertex(m)!;
-      foreach (var dep in v.Successors) {
-        yield return dep.N;
-        foreach (var transDep in RecursiveDependenciesOf(dep.N)) {
-          yield return transDep;
-        }
+      var v = dependencies.FindVertex(m);
+      var immediatePredecessors = dependencies.GetVertices().SelectWhere(ppv => (ppv.Successors.Contains(v), ppv.N));
+      foreach (var pred in immediatePredecessors) {
+        yield return pred;
+        foreach (var trans in RecursiveDependantsOf(pred)) { yield return trans; }
       }
     }
     void ResolveAfterAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) =>
-      GenericResolution(decls, (curr, prev) => RecursiveDependenciesOf(curr).Contains(amd.NewlyProcessed) switch {
+      GenericResolution(decls, (curr, prev) => dependants!.Contains(curr) switch {
         true => ResolveModuleDeclaration(curr), // this `ModuleDecl` depends (directly or indirectly) on the modified one, so we have to resolve it normally
         false => PrevCache.ModuleDeclResolutionResults[prev], // this `ModuleDecl` is unaffected, so we can use the previous resolution result
       });
