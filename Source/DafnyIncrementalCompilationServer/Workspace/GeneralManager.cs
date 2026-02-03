@@ -37,7 +37,7 @@ namespace Microsoft.Dafny.IncrementalCompilation.Workspace {
                     ProjectManagerDatabase.ImplicitProject(firstFile); // fuck if I know; TODO: find out
       return new(createProjectManager(StackSize, project), fileSystem, logger);
     }
-    public void ApplyModification(IncCompModification modification) {
+    public void ApplyModification(IncCompModifications modification) {
       fileSystem.ApplyModification(modification);
       manager.ApplyModification(modification);
     }

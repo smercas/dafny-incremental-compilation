@@ -10,11 +10,11 @@ using System.Threading.Tasks;
 
 namespace Microsoft.Dafny;
 
-public abstract class IncCompModification {
+public abstract class IncCompModifications {
 }
 
 // the scope of modifications most likely will always be constrained to that of a module declaration
-public abstract class ModificationToModuleDeclaration : IncCompModification {
+public abstract class ModificationToModuleDeclaration : IncCompModifications {
   public class Pair<T>(T prev) where T : class {
     public T Old { get; private init; } = prev;
     private T? newlyProcessed = null;

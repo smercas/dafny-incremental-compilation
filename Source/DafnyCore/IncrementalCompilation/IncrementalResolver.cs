@@ -125,14 +125,14 @@ public class InitialIncrementalResolver(Program program) : IncrementalResolver(p
   }
 }
 
-public class SubsequentIncrementalResolver(Program program, ResolutionCache prevCache, IncCompModification? modification) : IncrementalResolver(program) {
+public class SubsequentIncrementalResolver(Program program, ResolutionCache prevCache, IncCompModifications? modification) : IncrementalResolver(program) {
   public override ResolutionCache Cache { get; protected set; } = new ResolutionCache();
   public ResolutionCache PrevCache { get; private init; } = prevCache;
-  public IncCompModification? Modification { get; private init; } = modification;
+  public IncCompModifications? Modification { get; private init; } = modification;
 
   #region Secondary Constructors
   public SubsequentIncrementalResolver(
-    Program program, IncrementalResolver prevIncResolver, IncCompModification? modification
+    Program program, IncrementalResolver prevIncResolver, IncCompModifications? modification
   ) : this(program, prevIncResolver.Cache, modification) { }
   #endregion
 

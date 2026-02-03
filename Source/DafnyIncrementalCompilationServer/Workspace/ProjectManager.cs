@@ -22,7 +22,7 @@ public delegate ProjectManager CreateProjectManager(
 
 public class ProjectManager : IDisposable {
   private readonly DafnyOptions options;
-  public IncCompModification? Modification {
+  public IncCompModifications? Modification {
     get => options.Modification();
     set => options.Modification(value);
   }
@@ -165,7 +165,7 @@ public class ProjectManager : IDisposable {
     // collect entry points here in a id to entry point mapping
   }
 
-  public void ApplyModification(IncCompModification modification) {
+  public void ApplyModification(IncCompModifications modification) {
     Modification = modification;
     StartNewCompilation();
   }

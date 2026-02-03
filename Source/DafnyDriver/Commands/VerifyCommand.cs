@@ -116,20 +116,23 @@ public static class VerifyCommand {
 //#endif
     }
     Console.WriteLine($"Verification took an additional {DateTime.Now - afterFirstResolution}");
+    Console.WriteLine(new string('-', 40));
     var beforeSecondComp = DateTime.Now;
+    const string fileBaseName = "new.dfy";
+    const string lemmaName = "m";
     options.Set(
       DafnyLangSymbolResolver.CachingType,
       new DafnyLangSymbolResolver.CachingMode.Incremental(
         new AppendStatementToMethod((await compilation.Resolution)!
-                                      .CanVerifies![(await compilation.Compilation.RootFiles)[0].Uri]
+                                      .CanVerifies![(await compilation.Compilation.RootFiles).First(f => f.BaseName is fileBaseName).Uri]
                                       .Values.OfType<Lemma>()
-                                      .First(l => l is { Body: not null, Name: "_IPM_m", } )))
+                                      .First(l => l is { Body: not null, Name: $"_IPM_{lemmaName}", } )))
     );
     compilation = CliCompilation.Create(options);
     compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
-      foreach (var file in files) {
+      var file = files.First(f => f.BaseName is fileBaseName);
         var contents = file.GetContent().Reader.ReadToEnd();
-        string expressionToAssert = "0 == 1";
+        string expressionToAssert = "1 == 1";
         //string expressionToAssert = DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(new LiteralExpr(SourceOrigin.NoToken, true), DafnyCore.IncrementalCompilation.ProtectorFunctions.Protect).ToString();
         file.GetContent = () => {
           var body = ((options.Get(DafnyLangSymbolResolver.CachingType)
@@ -140,7 +143,7 @@ public static class VerifyCommand {
           contents = contents.Insert(endOfBody, $"assert {expressionToAssert}; ");
           return new FileSnapshot(new StringReader(contents), null);
         };
-      }
+      Console.WriteLine($"root files retrieval took {DateTime.Now - beforeSecondComp}");
     }); //normally this would be replaced by actually getting the file modified
     compilation.Start();
     resolution = await compilation.Resolution;

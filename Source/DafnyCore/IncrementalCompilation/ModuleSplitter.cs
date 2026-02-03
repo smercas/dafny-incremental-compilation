@@ -176,10 +176,12 @@ namespace DafnyCore.IncrementalCompilation {
     }
     private IEnumerable<RefiningModuleGenerator> Split(IteratorDecl id) {
       if (id.Body is null) { yield break; }
+      yield break;
       yield return new RefiningModuleGenerator.FromIteratorDecl(id);
     }
     private IEnumerable<RefiningModuleGenerator> Split(SubsetTypeDecl std) {
       if (std.Witness is null) { yield break; } // ??? maybe constraint also plays a role here?
+      yield break;
       yield return new RefiningModuleGenerator.FromSubSetTypeDecl(std);
     }
     private IEnumerable<RefiningModuleGenerator> Split<E>(E dcd) where E: TopLevelDeclWithMembers {
