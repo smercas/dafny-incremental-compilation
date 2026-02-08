@@ -70,9 +70,8 @@ public static class VerifyCommand {
 
     var resolution = await compilation.Resolution;
     var afterFirstResolution = DateTime.Now;
-    Console.WriteLine($"First resolution donw in {afterFirstResolution - beforeFirstComp}");
-
-    if (resolution != null) {
+    Console.WriteLine($"First resolution done in {afterFirstResolution - beforeFirstComp}");
+    if (resolution is { HasErrors: false }) {
       Subject<CanVerifyResult> verificationResults = new();
 
       ReportVerificationDiagnostics(compilation, verificationResults);
@@ -84,87 +83,62 @@ public static class VerifyCommand {
       await verificationResultsLogged;
       await proofDependenciesReported;
 
-//#if INC_COMP
-//      var L = resolution.ResolvedProgram.DefaultModuleDef.DefaultClass!.Members.OfType<Lemma>().First(m => m.Name == "L")!;
-//      L.Body!.Body.Add(new AssertStmt(SourceOrigin.NoToken,
-//        new BinaryExpr(SourceOrigin.NoToken, BinaryExpr.Opcode.Eq,
-//          new LiteralExpr(SourceOrigin.NoToken, 0),
-//          new LiteralExpr(SourceOrigin.NoToken, 0)
-//        //new NameSegment(SourceOrigin.NoToken, "x", null),
-//        //new NameSegment(SourceOrigin.NoToken, "y", null)
-//        //new LiteralExpr(SourceOrigin.NoToken, true
-//        ), null, null)
-//      );
-//      var resolver = new ModuleResolver(new ProgramResolver(resolution.ResolvedProgram), resolution.ResolvedProgram.DefaultModule.Options);
-//      L.Body!.Body[^1].GenResolve(resolver, ResolutionContext.FromCodeContext(L));
-//      resolver.SolveAllTypeConstraints();
-//      var visitor = new CheckTypeInferenceVisitor(resolver);
-//      typeof(CheckTypeInferenceVisitor).GetMethod("VisitStatement", BindingFlags.Instance | BindingFlags.NonPublic)!
-//                                       .Invoke(visitor, [L.Body!.Body[^1], visitor.GetContext(L, false)]);
-//      await compilation.Compilation.Cancel(L.Origin.GetFilePosition());
+      var beforeSecondComp = DateTime.Now;
+      Console.WriteLine($"First \"verification\" done in {beforeSecondComp - afterFirstResolution}");
 
-//      verificationResults = new();
+      const string fileBaseName = "new.dfy";
+      const string lemmaName = "m";
 
-//      ReportVerificationDiagnostics(compilation, verificationResults);
-//      verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
-//      proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
-//      verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
-//      compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
-//      await verificationSummarized;
-//      await verificationResultsLogged;
-//      await proofDependenciesReported;
-//#endif
-    }
-    Console.WriteLine($"Verification took an additional {DateTime.Now - afterFirstResolution}");
-    Console.WriteLine(new string('-', 40));
-    var beforeSecondComp = DateTime.Now;
-    const string fileBaseName = "new.dfy";
-    const string lemmaName = "m";
-    options.Set(
-      DafnyLangSymbolResolver.CachingType,
-      new DafnyLangSymbolResolver.CachingMode.Incremental(
-        new AppendStatementToMethod((await compilation.Resolution)!
+      async Task<Lemma> getLemmaFrom(CliCompilation compilation) => (await compilation.Resolution)!
                                       .CanVerifies![(await compilation.Compilation.RootFiles).First(f => f.BaseName is fileBaseName).Uri]
                                       .Values.OfType<Lemma>()
-                                      .First(l => l is { Body: not null, Name: $"_IPM_{lemmaName}", } )))
-    );
-    compilation = CliCompilation.Create(options);
-    compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
-      var file = files.First(f => f.BaseName is fileBaseName);
-        var contents = file.GetContent().Reader.ReadToEnd();
-        string expressionToAssert = "1 == 1";
-        //string expressionToAssert = DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(new LiteralExpr(SourceOrigin.NoToken, true), DafnyCore.IncrementalCompilation.ProtectorFunctions.Protect).ToString();
-        file.GetContent = () => {
-          var body = ((options.Get(DafnyLangSymbolResolver.CachingType)
-                        as DafnyLangSymbolResolver.CachingMode.Incremental)!.Modification!
-                        as AppendStatementToMethod)!.Method.Body!;
-          const string endl = "\r\n";
-          var endOfBody = contents.Split(endl)[..(body.EndToken.line - 1)].Sum(s => s.Length + endl.Length) + body.EndToken.col - 1; // position just before `}` character that closes the method body
-          contents = contents.Insert(endOfBody, $"assert {expressionToAssert}; ");
-          return new FileSnapshot(new StringReader(contents), null);
-        };
-      Console.WriteLine($"root files retrieval took {DateTime.Now - beforeSecondComp}");
-    }); //normally this would be replaced by actually getting the file modified
-    compilation.Start();
-    resolution = await compilation.Resolution;
-    var afterSecondResolution = DateTime.Now;
-    Console.WriteLine(new string('-', 40));
-    Console.WriteLine($"Second resolution done in {afterSecondResolution - beforeSecondComp}");
+        .First(l => l is { Body: not null, Name: $"_IPM_{lemmaName}", });
+      var firstLemma = await getLemmaFrom(compilation);
+      var (startToken, endToken) = (firstLemma.StartToken, firstLemma.EndToken);
+      void writeCachingType(CliCompilation compilation, IncCompModifications? modification) {
+        options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(modification));
+      }
+      int absPositionFrom(string[] split, string endl, Token tok) => split[..(tok.line - 1)].Sum(s => s.Length + endl.Length) + tok.col - 1;
+      writeCachingType(compilation, new AppendStatementToMethod(firstLemma));
+      while (true) {
+        Console.Write("Enter assertion: ");
+        var expressionToAssert = Console.ReadLine();
+        if (expressionToAssert is ":q") { break; }
+        var newCompilation = CliCompilation.Create(options);
+        newCompilation.Compilation.RootFiles = newCompilation.Compilation.RootFiles.Then(files => {
+          var file = files.First(f => f.BaseName is fileBaseName);
+          var contents = file.GetContent().Reader.ReadToEnd();
+          //string expressionToAssert = "1 == 1";
+          //string expressionToAssert = DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(new LiteralExpr(SourceOrigin.NoToken, true), DafnyCore.IncrementalCompilation.ProtectorFunctions.Protect).ToString();
+          file.GetContent = () => {
+            const string endl = "\r\n";
+            var split = contents.Split(endl);
+            var endOfBody = absPositionFrom(split, endl, endToken); // position just before `}` character that closes the method body
+            contents = contents.Insert(endOfBody, $"{(contents[endOfBody - 1] == ' ' ? "" : " ")}assert {expressionToAssert}; ");
+            return new FileSnapshot(new StringReader(contents), null);
+          };
+        }); //normally this would be replaced by actually getting the file modified
+        newCompilation.Start();
+        var newResolution = await newCompilation.Resolution;
+        var afterSecondResolution = DateTime.Now;
 
-    if (resolution != null) {
-      Subject<CanVerifyResult> verificationResults = new();
+        if (newResolution is { HasErrors: false }) {
+          writeCachingType(newCompilation, new AppendStatementToMethod(await getLemmaFrom(newCompilation)));
 
-      ReportVerificationDiagnostics(compilation, verificationResults);
-      var verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
-      var proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
-      var verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
-      compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
-      await verificationSummarized;
-      await verificationResultsLogged;
-      await proofDependenciesReported;
+          verificationResults = new();
+
+          ReportVerificationDiagnostics(newCompilation, verificationResults);
+          verificationSummarized = ReportVerificationSummary(newCompilation, verificationResults);
+          proofDependenciesReported = ReportProofDependencies(newCompilation, newResolution, verificationResults);
+          verificationResultsLogged = LogVerificationResults(newCompilation, newResolution, verificationResults);
+          newCompilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
+          await verificationSummarized;
+          await verificationResultsLogged;
+          await proofDependenciesReported;
+          Console.WriteLine($"Second \"verification\" done in {DateTime.Now - afterSecondResolution}");
+        }
+      }
     }
-    Console.WriteLine($"Verification took an additional {DateTime.Now - afterSecondResolution}");
-
     return await compilation.GetAndReportExitCode();
   }
 

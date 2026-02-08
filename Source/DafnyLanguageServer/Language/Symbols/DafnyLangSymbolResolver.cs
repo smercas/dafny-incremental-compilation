@@ -21,7 +21,7 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
     public abstract record CachingMode {
       public sealed record None : CachingMode;
       public sealed record HashBased : CachingMode;
-      public sealed record Incremental(IncCompModification? Modification) : CachingMode;
+      public sealed record Incremental(IncCompModifications? Modification) : CachingMode;
       public static CachingMode Default() => new None();
     }
     public static readonly Option<CachingMode> CachingType = new(
