@@ -1,12 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using IntervalTree;
 using Microsoft.Boogie;
 using Microsoft.Dafny;
@@ -15,6 +7,15 @@ using Microsoft.Dafny.LanguageServer.Language;
 using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using Microsoft.Dafny.LanguageServer.Workspace;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using VC;
 using VCGeneration;
 using Token = Microsoft.Dafny.Token;
@@ -33,7 +34,8 @@ public class CliCompilation {
 
   private CliCompilation(
     CreateCompilation createCompilation,
-    DafnyOptions options) {
+    DafnyOptions options,
+    CliCompilation? oldCompilation = null) { // TODO: remove when we properly reuse the execution engine
     Options = options;
 
     if (options.DafnyProject == null) {
@@ -48,7 +50,11 @@ public class CliCompilation {
     options.RunningBoogieFromCommandLine = true;
 
     var input = new CompilationInput(options, 0, options.DafnyProject);
-    var executionEngine = new ExecutionEngine(options, new EmptyVerificationResultCache(), DafnyMain.LargeThreadScheduler);
+
+    var executionEngine = oldCompilation is not null ?
+      (oldCompilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(oldCompilation.Compilation) as ExecutionEngine)!
+    :
+      new(options, new EmptyVerificationResultCache(), DafnyMain.LargeThreadScheduler);
     Compilation = createCompilation(executionEngine, input);
   }
 
@@ -84,11 +90,11 @@ public class CliCompilation {
 
   public Task<ResolutionResult?> Resolution => Compilation.Resolution;
 
-  public static CliCompilation Create(DafnyOptions options) {
+  public static CliCompilation Create(DafnyOptions options, CliCompilation? oldCompilation = null) {
     var fileSystem = OnDiskFileSystem.Instance;
     ILoggerFactory factory = new LoggerFactory();
     var telemetryPublisher = new CliTelemetryPublisher(factory.CreateLogger<TelemetryPublisherBase>());
-    return new CliCompilation(CreateCompilation, options);
+    return new CliCompilation(CreateCompilation, options, oldCompilation);
 
     Compilation CreateCompilation(ExecutionEngine engine, CompilationInput input) =>
       new(factory.CreateLogger<Compilation>(), fileSystem,

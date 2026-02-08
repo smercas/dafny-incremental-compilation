@@ -85,6 +85,7 @@ public static class VerifyCommand {
 
       var beforeSecondComp = DateTime.Now;
       Console.WriteLine($"First \"verification\" done in {beforeSecondComp - afterFirstResolution}");
+      //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();
 
       const string fileBaseName = "new.dfy";
       const string lemmaName = "m";
@@ -104,8 +105,8 @@ public static class VerifyCommand {
         Console.Write("Enter assertion: ");
         var expressionToAssert = Console.ReadLine();
         if (expressionToAssert is ":q") { break; }
-        var newCompilation = CliCompilation.Create(options);
-        newCompilation.Compilation.RootFiles = newCompilation.Compilation.RootFiles.Then(files => {
+        compilation = CliCompilation.Create(options, compilation);
+        compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
           var file = files.First(f => f.BaseName is fileBaseName);
           var contents = file.GetContent().Reader.ReadToEnd();
           //string expressionToAssert = "1 == 1";
@@ -118,25 +119,26 @@ public static class VerifyCommand {
             return new FileSnapshot(new StringReader(contents), null);
           };
         }); //normally this would be replaced by actually getting the file modified
-        newCompilation.Start();
-        var newResolution = await newCompilation.Resolution;
+        compilation.Start();
+        resolution = await compilation.Resolution;
         var afterSecondResolution = DateTime.Now;
 
-        if (newResolution is { HasErrors: false }) {
-          writeCachingType(newCompilation, new AppendStatementToMethod(await getLemmaFrom(newCompilation)));
+        if (resolution is { HasErrors: false }) {
+          writeCachingType(compilation, new AppendStatementToMethod(await getLemmaFrom(compilation)));
 
           verificationResults = new();
 
-          ReportVerificationDiagnostics(newCompilation, verificationResults);
-          verificationSummarized = ReportVerificationSummary(newCompilation, verificationResults);
-          proofDependenciesReported = ReportProofDependencies(newCompilation, newResolution, verificationResults);
-          verificationResultsLogged = LogVerificationResults(newCompilation, newResolution, verificationResults);
-          newCompilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
+          ReportVerificationDiagnostics(compilation, verificationResults);
+          verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
+          proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
+          verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
+          compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
           await verificationSummarized;
           await verificationResultsLogged;
           await proofDependenciesReported;
           Console.WriteLine($"Second \"verification\" done in {DateTime.Now - afterSecondResolution}");
         }
+        //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();
       }
     }
     return await compilation.GetAndReportExitCode();
