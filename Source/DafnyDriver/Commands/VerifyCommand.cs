@@ -60,6 +60,7 @@ public static class VerifyCommand {
       Concat(DafnyCommands.ResolverOptions);
 
   public static async Task<int> HandleVerification(DafnyOptions options) {
+    options.NormalizeNames = false;
     var beforeFirstComp = DateTime.Now;
     if (options.Get(CommonOptionBag.VerificationCoverageReport) != null) {
       options.TrackVerificationCoverage = true;
