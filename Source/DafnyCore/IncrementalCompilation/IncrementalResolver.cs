@@ -26,6 +26,7 @@ public sealed record ResolutionCache(
 
 public abstract class IncrementalResolver(Program program) : ProgramResolver(program) {
   public abstract ResolutionCache Cache { get; protected set; }
+  protected virtual void onError() { }
   public override Task Resolve(CancellationToken cancellationToken) {
     Type.ResetScopes();
 
@@ -46,6 +47,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     ComputeModuleDependencyGraph(Program, out var moduleDeclarationPointers);
 
     if (Reporter.ErrorCount != startingErrorCount) {
+      onError();
       return Task.CompletedTask;
     }
 
@@ -72,6 +74,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     ResolveSortedDecls(moduleDeclarationPointers, cancellationToken);
 
     if (Reporter.ErrorCount != startingErrorCount) {
+      onError();
       return Task.CompletedTask;
     }
 
@@ -110,6 +113,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
 public class InitialIncrementalResolver(Program program) : IncrementalResolver(program) {
   public override ResolutionCache Cache { get; protected set; } = new ResolutionCache();
 
+  protected override void onError() => throw new InvalidOperationException("initial resolution can't have resolution errors, since it's the basis of subsequent resolution runs");
   protected override void ResolveSystemModule() {
     Cache = Cache with {
       SystemModuleManager = Program.SystemModuleManager,
@@ -136,6 +140,7 @@ public class SubsequentIncrementalResolver(Program program, ResolutionCache prev
   ) : this(program, prevIncResolver.Cache, modification) { }
   #endregion
 
+  protected override void onError() => Cache = PrevCache;
   protected override void ResolveSystemModule() {
     Cache = Cache with {
       SystemModuleManager = PrevCache.SystemModuleManager,
@@ -146,7 +151,7 @@ public class SubsequentIncrementalResolver(Program program, ResolutionCache prev
   protected override void ResolveSortedDecls(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, CancellationToken cancellationToken) {
     Contract.Requires(Cache.SortedDecls.Count() == PrevCache.SortedDecls.Count());
     // req clause for memberwise equality / equivalence, not `FullDafnyName` equality
-    Contract.Requires(Contract.ForAll(Cache.SortedDecls.Zip(PrevCache.SortedDecls), pair => { var (c, p) = pair; return c.FullDafnyName == p.FullDafnyName; } ));
+    Contract.Requires(Contract.ForAll(Cache.SortedDecls.Zip(PrevCache.SortedDecls), pair => { var (c, p) = pair; return c.FullDafnyName == p.FullDafnyName; }));
     if (Modification is not ModificationToModuleDeclaration { AffectedModuleDecl: var amd } mtmd) {
       // for now, as a default case, if module doesn't affect a moduleDecl, we do resolution normally
       // this branch is equivalent to `InitialIncrementalResolver.ResolveSortedDecls`
@@ -165,11 +170,11 @@ public class SubsequentIncrementalResolver(Program program, ResolutionCache prev
       var moduleResolutionResult = resolve(curr, prev);
       ProcessDeclarationResolutionResult(moduleDeclarationPointers, curr, moduleResolutionResult);
     }
-    
+
     void UseCache((ModuleDecl, ModuleDecl) decls) => GenericResolution(decls, (curr, prev) => PrevCache.ModuleDeclResolutionResults[prev]);
-    
+
     bool IsAffectedModuleDecl((ModuleDecl _, ModuleDecl Prev) decls) => ReferenceEquals(amd.Old, decls.Prev);
-    
+
     FrozenSet<ModuleDecl>? dependants = null;
     void ResolveAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) => GenericResolution(decls, (curr, prev) => {
       amd.NewlyProcessed = curr;
