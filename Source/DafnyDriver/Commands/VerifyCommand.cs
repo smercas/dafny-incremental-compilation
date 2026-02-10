@@ -103,6 +103,12 @@ public static class VerifyCommand {
         try {
           firstLemma = await getLemmaFrom(compilation);
           break;
+        } catch (InvalidOperationException ex) {
+          if (ex.Message is "Sequence contains no matching element") {
+            Console.WriteLine($"No lemma named `{lemmaName}` exists in the current program");
+          } else {
+            Console.WriteLine($"Error: {ex.Message}");
+          }
         } catch (Exception ex) {
           Console.WriteLine($"Error: {ex.Message}");
         }
