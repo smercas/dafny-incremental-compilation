@@ -109,6 +109,17 @@ public class Attributes : NodeWithOrigin, ICanFormat {
     return attrs.AsEnumerable().FirstOrDefault(attr => attr.Name == nm);
   }
 
+  public static (Attributes? after, Attributes? removed) WithoutFirstOccurenceOf(Attributes? attrs, string nm) {
+    Contract.Requires(nm != null);
+    if (attrs == null) { return (null, null); }
+    var cloner = new Cloner();
+    if (attrs.Name == nm) { return (cloner.CloneAttributes(attrs.Prev), cloner.CloneAttributes(attrs, Cloner.HandlePrevKind.LeaveAsNull)); }
+    var (afterOfPrev, removed) = WithoutFirstOccurenceOf(attrs.Prev, nm!);
+    var after = cloner.CloneAttributes(attrs, Cloner.HandlePrevKind.LeaveAsNull);
+    after.Prev = afterOfPrev;
+    return (after, removed);
+  }
+
   /// <summary>
   /// Returns true if "nm" is a specified attribute.  If it is, then:
   /// - if the attribute is {:nm true}, then value==true

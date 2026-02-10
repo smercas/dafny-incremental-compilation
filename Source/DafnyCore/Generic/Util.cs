@@ -28,24 +28,24 @@ namespace Microsoft.Dafny {
   public static class Util {
 #nullable enable
 
-    public static IEnumerable<Statement> PreResolveSubStatements(this Expression e) => e switch {
-      StmtExpr se => Concat(se.S.PreResolveSubStatements(), se.E.PreResolveSubStatements()),
-      ConcreteSyntaxExpression cse => cse.PreResolveSubExpressions.SelectMany(PreResolveSubStatements),
-      DatatypeValue dv => dv.Bindings.ArgumentBindings.SelectMany(ab => ab.Actual.PreResolveSubStatements()),
-      _ => e.SubExpressions.SelectMany(PreResolveSubStatements),
+    public static IEnumerable<Statement> PreResolveRecursiveSubStatements(this Expression e) => e switch {
+      StmtExpr se => Concat(se.S.PreResolveRecursiveSubStatements(), se.E.PreResolveRecursiveSubStatements()),
+      ConcreteSyntaxExpression cse => cse.PreResolveSubExpressions.SelectMany(PreResolveRecursiveSubStatements),
+      DatatypeValue dv => dv.Bindings.ArgumentBindings.SelectMany(ab => ab.Actual.PreResolveRecursiveSubStatements()),
+      _ => e.SubExpressions.SelectMany(PreResolveRecursiveSubStatements),
     };
-    public static IEnumerable<Statement> PreResolveSubStatements(this Statement s) =>
-      Concat([s], s.PreResolveSubStatements.SelectMany(PreResolveSubStatements), s.PreResolveSubExpressions.SelectMany(PreResolveSubStatements));
+    public static IEnumerable<Statement> PreResolveRecursiveSubStatements(this Statement s) =>
+      Concat([s], s.PreResolveSubStatements.SelectMany(PreResolveRecursiveSubStatements), s.PreResolveSubExpressions.SelectMany(PreResolveRecursiveSubStatements));
 
-    public static IEnumerable<Expression> PreResolveSubExpressions(this Expression e) => Concat([e], e switch {
-      StmtExpr se => Concat(se.S.PreResolveSubExpressions(), se.E.PreResolveSubExpressions()),
-      ConcreteSyntaxExpression cse => cse.PreResolveSubExpressions.SelectMany(PreResolveSubExpressions),
-      DatatypeValue dv => dv.Bindings.ArgumentBindings.SelectMany(ab => ab.Actual.PreResolveSubExpressions()),
-      _ => e.SubExpressions.SelectMany(PreResolveSubExpressions),
+    public static IEnumerable<Expression> PreResolveRecursiveSubExpressions(this Expression e) => Concat([e], e switch {
+      StmtExpr se => Concat(se.S.PreResolveRecursiveSubExpressions(), se.E.PreResolveRecursiveSubExpressions()),
+      ConcreteSyntaxExpression cse => cse.PreResolveSubExpressions.SelectMany(PreResolveRecursiveSubExpressions),
+      DatatypeValue dv => dv.Bindings.ArgumentBindings.SelectMany(ab => ab.Actual.PreResolveRecursiveSubExpressions()),
+      _ => e.SubExpressions.SelectMany(PreResolveRecursiveSubExpressions),
     });
 
-    public static IEnumerable<Expression> PreResolveSubExpressions(this Statement s) =>
-      Concat(s.PreResolveSubStatements.SelectMany(PreResolveSubExpressions), s.PreResolveSubExpressions.SelectMany(PreResolveSubExpressions));
+    public static IEnumerable<Expression> PreResolveRecursiveSubExpressions(this Statement s) =>
+      Concat(s.PreResolveSubStatements.SelectMany(PreResolveRecursiveSubExpressions), s.PreResolveSubExpressions.SelectMany(PreResolveRecursiveSubExpressions));
 
     public static bool All(this IEnumerable<bool> es) => es.All(e => e);
 
@@ -116,8 +116,8 @@ namespace Microsoft.Dafny {
       }
       // `enumerator` is at the first element of `es`
       IEnumerable<(Predicate<T>, Action<T>)> phaseSepsarators =
-        [..post.Select(p => (p.when, p.on)), (static _ => false, static _ => throw new UnreachableException())];
-      foreach (var ((when, on), action) in phaseSepsarators.Zip([pre, ..post.Select(p => p.after)])) {
+        [.. post.Select(p => (p.when, p.on)), (static _ => false, static _ => throw new UnreachableException())];
+      foreach (var ((when, on), action) in phaseSepsarators.Zip([pre, .. post.Select(p => p.after)])) {
         while (!when(enumerator.Current)) {
           action(enumerator.Current);
           if (!enumerator.MoveNext()) {
@@ -129,6 +129,12 @@ namespace Microsoft.Dafny {
           return;
         }
       }
+    }
+    public static IList<T> ModifyAllInPlace<T>(this IList<T> l, Func<T, T> transformer) {
+      for (int i = 0; i < l.Count; i += 1) {
+        l[i] = transformer(l[i]);
+      }
+      return l;
     }
 #nullable disable
 

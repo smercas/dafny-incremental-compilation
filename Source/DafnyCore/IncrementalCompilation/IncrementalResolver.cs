@@ -32,9 +32,9 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
 
     Type.EnableScopes();
 
-    var moduleWithOldRootStuff = new ModuleSplitter(Options).Split(Program);
+    var moduleWithOldRootStuff = new ModuleSplitterAndExpressionProtector(Options).SplitAndProtect(Program);
     AddProtectorsModule();
-    new ProtectorsImporter(Options).ImportIn(moduleWithOldRootStuff);
+    new ProtectorsImporter(Options).ImportIn(moduleWithOldRootStuff); // importing in this module transfers the imports to all the other modules
 
     // For the formatter, we ensure we take snapshots of the PrefixNamedModules and topleveldecls
     Program.DefaultModuleDef.PreResolveSnapshotForFormatter();
@@ -94,6 +94,9 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     var decl = new LiteralModuleDecl(Options, def, Program.DefaultModuleDef, Guid.NewGuid());
     def.DefaultClass!.Members.AddRange(ProtectorFunctions.All.Select(pf => pf.Function));
     def.DefaultClass!.SetMembersBeforeResolution();
+    foreach (var arity in ProtectorFunctions.All.Select(pf => pf.Function.Ins.Count).Distinct()) {
+      SystemModuleManager.CreateArrowTypeDecl(arity);
+    }
     Program.DefaultModuleDef.SourceDecls.Insert(0, decl);
   }
   protected abstract void ResolveSystemModule();

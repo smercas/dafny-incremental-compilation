@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
@@ -313,26 +314,34 @@ namespace Microsoft.Dafny {
       return new FrameExpression(this, frame);
     }
 
-    public Attributes CloneAttributes(Attributes attrs) {
+    public enum HandlePrevKind { Clone, Copy, LeaveAsNull }
+    public Attributes CloneAttributes(Attributes attrs, HandlePrevKind handlePrev = HandlePrevKind.Clone) {
+      Attributes handled(Attributes prev) => handlePrev switch {
+        HandlePrevKind.Clone => CloneAttributes(prev),
+        HandlePrevKind.Copy => prev,
+        HandlePrevKind.LeaveAsNull => null,
+        _ => throw new UnreachableException(),
+      };
+
       if (attrs == null) {
         return null;
       } else if (!CloneResolvedFields && attrs.Name.StartsWith("_")) {
         // skip this attribute, since it would have been produced during resolution
-        return CloneAttributes(attrs.Prev);
+        return handled(attrs.Prev);
       } else if (attrs is UserSuppliedAttributes usa) {
         return new UserSuppliedAttributes(Origin(usa.Origin), Origin(usa.OpenBrace), Origin(usa.CloseBrace),
-          attrs.Args.ConvertAll(CloneExpr), CloneAttributes(attrs.Prev));
+          attrs.Args.ConvertAll(CloneExpr), handled(attrs.Prev));
       } else if (attrs is UserSuppliedAtAttribute usaa) {
         var arg = CloneExpr(usaa.Arg);
         if (usaa.Arg.Type != null) { // The attribute has already been expanded
           arg.Type = usaa.Arg.Type;
           arg.PreType = usaa.Arg.PreType;
         }
-        return new UserSuppliedAtAttribute(Origin(usaa.Origin), arg, CloneAttributes(usaa.Prev)) {
+        return new UserSuppliedAtAttribute(Origin(usaa.Origin), arg, handled(usaa.Prev)) {
           Builtin = usaa.Builtin
         };
       } else {
-        var result = new Attributes(attrs.Name, attrs.Args.ConvertAll(CloneExpr), CloneAttributes(attrs.Prev));
+        var result = new Attributes(attrs.Name, attrs.Args.ConvertAll(CloneExpr), handled(attrs.Prev));
         result.SetOrigin(Origin(attrs.Origin));
         return result;
       }
