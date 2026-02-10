@@ -89,13 +89,24 @@ public static class VerifyCommand {
       //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();
 
       const string fileBaseName = "new.dfy";
-      const string lemmaName = "m";
+      string lemmaName = null!;
+      Lemma firstLemma = null!;
 
       async Task<Lemma> getLemmaFrom(CliCompilation compilation) => (await compilation.Resolution)!
-                                      .CanVerifies![(await compilation.Compilation.RootFiles).First(f => f.BaseName is fileBaseName).Uri]
-                                      .Values.OfType<Lemma>()
-        .First(l => l is { Body: not null, Name: $"_IPM_{lemmaName}", });
-      var firstLemma = await getLemmaFrom(compilation);
+        //.CanVerifies![(await compilation.Compilation.RootFiles).First(f => f.BaseName is fileBaseName).Uri]
+        .CanVerifies!.Values.SelectMany(v => v.Values).OfType<Lemma>()
+        .First(l => l is { Body: not null, } && l.Name == $"_IPM_{lemmaName}");
+      while (true) {
+        Console.Write("Enter Lemma you wish to work on: ");
+        lemmaName = Console.ReadLine()!;
+        if (lemmaName is null) { return -1; }
+        try {
+          firstLemma = await getLemmaFrom(compilation);
+          break;
+        } catch (Exception ex) {
+          Console.WriteLine($"Error: {ex.Message}");
+        }
+      }
       var (startToken, endToken) = (firstLemma.StartToken, firstLemma.EndToken);
       void writeCachingType(CliCompilation compilation, IncCompModifications? modification) {
         options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(modification));
@@ -104,8 +115,8 @@ public static class VerifyCommand {
       writeCachingType(compilation, new AppendStatementToMethod(firstLemma));
       while (true) {
         Console.Write("Enter assertion: ");
-        var expressionToAssert = Console.ReadLine();
-        if (expressionToAssert is ":q") { break; }
+        var expressionToAssert = Console.ReadLine()!;
+        if (expressionToAssert is null or ":q") { break; }
         compilation = CliCompilation.Create(options, compilation);
         compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
           var file = files.First(f => f.BaseName is fileBaseName);
