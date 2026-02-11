@@ -98,7 +98,7 @@ public static class VerifyCommand {
       while (true) {
         Console.Write("Enter Lemma you wish to work on (or type `:q` to exit): ");
         lemmaName = Console.ReadLine()!;
-        if (lemmaName is null or ":q") { return 0; }
+        if (lemmaName is null or ":q") { return await compilation.GetAndReportExitCode(); }
         try {
           firstLemma = await getLemmaFrom(compilation);
           break;

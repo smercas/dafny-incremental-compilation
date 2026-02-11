@@ -1,4 +1,5 @@
-﻿using Microsoft.Dafny;
+﻿#nullable enable
+using Microsoft.Dafny;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -8,7 +9,7 @@ using System.Threading.Tasks;
 using static DafnyCore.IncrementalCompilation.ProtectorFunctions;
 
 namespace DafnyCore.IncrementalCompilation {
-  internal static class ProtectedExtension {
+  internal static class ProtectedExtension { // FOR THE LOVE OF GOD LET'S KEEP THIS BEFORE THE RESOLUTION
     public static Expression AsProtected(this Expression e) => e switch {
       ApplyExpr p => AsProtectedParticular(p),
       FunctionCallExpr p => AsProtectedParticular(p),
@@ -82,7 +83,10 @@ namespace DafnyCore.IncrementalCompilation {
       ConcreteSyntaxExpression p => p switch {
         NameSegment pp => AsProtectedParticular(pp),
         SuffixExpr pp => pp switch {
-          ApplySuffix ppp => AsProtectedParticular(ppp),
+          ApplySuffix ppp => ppp switch {
+            ProtectToProveApplySuffix pppp => AsProtectedParticular(pppp),
+            _ => AsProtectedParticular(ppp),
+          },
           ExprDotName ppp => AsProtectedParticular(ppp),
           FieldLocationExpression ppp => AsProtectedParticular(ppp),
           IndexFieldLocationExpression ppp => AsProtectedParticular(ppp),
@@ -95,7 +99,7 @@ namespace DafnyCore.IncrementalCompilation {
           _ => AsProtectedParticular(pp),
         },
         LetOrFailExpr pp => AsProtectedParticular(pp),
-        DefaultValueExpression pp => pp switch {
+        DefaultValueExpression pp => pp switch { // geniunely unreachable???
           DefaultValueExpressionType ppp => AsProtectedParticular(ppp),
           DefaultValueExpressionPreType ppp => AsProtectedParticular(ppp),
           _ => AsProtectedParticular(pp),
@@ -115,17 +119,20 @@ namespace DafnyCore.IncrementalCompilation {
       BoogieGenerator.BoogieFunctionCall p => AsProtectedParticular(p),
       _ => AsProtectedParticular(e),
     };
+    private static Cloner cloner { get; } = new();
+    private static E Clone<E>(this ICloneable<E> e) => e.Clone(cloner);
     private static Expression NotImplemented(Expression e) {
       Console.WriteLine($"Dafny IPM: {e.GetType().Name} not yet implemented.");
       return e;
     }
     private static Expression AsProtectedParticular(Expression e) => NotImplemented(e);
-    private static Expression AsProtectedParticular(StaticReceiverExpr e) => e;
-    private static Expression AsProtectedParticular(LiteralExpr e) => e;
-    private static Expression AsProtectedParticular(ThisExpr e) => ProtectorFunctions.WrappedWith(e, Protect);
-    private static Expression AsProtectedParticular(IdentifierExpr e) => ProtectorFunctions.WrappedWith(e, Protect);
-    private static Expression AsProtectedParticular(DatatypeValue e) => ProtectorFunctions.WrappedWith(e, Protect);
-    private static Expression AsProtectedParticular(NameSegment e) => ProtectorFunctions.WrappedWith(e, Protect);
+    private static Expression AsProtectedParticular(StaticReceiverExpr e) => e.Clone<StaticReceiverExpr>();
+    private static Expression AsProtectedParticular(LiteralExpr e) => e.Clone();
+    private static Expression AsProtectedParticular(ProtectToProveApplySuffix e) => e; // no need to make a clone, since they're another kind of protection that also clones its original
+    private static Expression AsProtectedParticular(ThisExpr e) => ProtectorFunctions.WrappedWith(e.Clone(), Protect);
+    private static Expression AsProtectedParticular(IdentifierExpr e) => ProtectorFunctions.WrappedWith(e.Clone(), Protect);
+    private static Expression AsProtectedParticular(DatatypeValue e) => ProtectorFunctions.WrappedWith(e.Clone(), Protect);
+    private static Expression AsProtectedParticular(NameSegment e) => ProtectorFunctions.WrappedWith(e.Clone(), Protect);
     private static Expression AsProtectedParticular(UnaryOpExpr e) {
       // `UnaryOpExpr.Opcode.Lit` used in translation, this method is called before translation
       Contract.Assert(e.Op is not UnaryOpExpr.Opcode.Lit);
@@ -133,7 +140,6 @@ namespace DafnyCore.IncrementalCompilation {
         UnaryOpExpr.Opcode.Cardinality or
         UnaryOpExpr.Opcode.Allocated or
         UnaryOpExpr.Opcode.Assigned || e is FreshExpr { Op: UnaryOpExpr.Opcode.Fresh });
-
       return new UnaryOpExpr(e.Origin, e.Op, e.E.AsProtected());
     }
     private static Expression AsProtectedParticular(SeqSelectExpr e) => new SeqSelectExpr(
@@ -146,12 +152,12 @@ namespace DafnyCore.IncrementalCompilation {
       e.Origin, e.Finite, e.Elements.ConvertAll(entry => new MapDisplayEntry(entry.A.AsProtected(), entry.B.AsProtected()))
     );
     private static Expression AsProtectedParticular(SeqConstructionExpr e) => new SeqConstructionExpr(
-      e.Origin, e.ExplicitElementType, e.N.AsProtected(), e.Initializer.AsProtected()
+      e.Origin, e.ExplicitElementType.ApplyIfNotNull(cloner.CloneType), e.N.AsProtected(), e.Initializer.AsProtected()
     );
     private static Expression AsProtectedParticular(SeqUpdateExpr e) => new SeqUpdateExpr(e.Origin, e.Seq.AsProtected(), e.Index.AsProtected(), e.Value.AsProtected());
     private static Expression AsProtectedParticular(BinaryExpr e) => new BinaryExpr(e.Origin, e.Op, e.E0.AsProtected(), e.E1.AsProtected());
     private static Expression AsProtectedParticular(ChainingExpression e) {
-      if (e.PrefixLimits.Any(l => l is not null)) {
+      if (e.PrefixLimits.Any(l => l is not null)) { // why?
         return NotImplemented(e);
       }
       return new ChainingExpression(e.Origin, e.Operands.ConvertAll(AsProtected), e.Operators, e.OperatorLocs, e.PrefixLimits);
@@ -163,7 +169,7 @@ namespace DafnyCore.IncrementalCompilation {
       return NotImplemented(e);
     }
     private static Expression AsProtectedParticular(LetExpr e) => new LetExpr(
-      e.Origin, e.LHSs, e.RHSs.ConvertAll(AsProtected), e.Body.AsProtected(), e.Exact, e.Attributes
+      e.Origin, e.LHSs.ConvertAll(cloner.CloneCasePattern), e.RHSs.ConvertAll(AsProtected), e.Body.AsProtected(), e.Exact, cloner.CloneAttributes(e.Attributes)
     );
     private static Expression AsProtectedParticular(ApplySuffix e) => new ApplySuffix(
       e.Origin, e.AtTok, e.Lhs, e.Bindings.ArgumentBindings.ConvertAll(ab => new ActualBinding(ab.FormalParameterName, ab.Actual.AsProtected(), ab.IsGhost)), e.CloseParen
@@ -171,9 +177,9 @@ namespace DafnyCore.IncrementalCompilation {
     private static Expression AsProtectedParticular(StmtExpr e) {
       Statement ReplaceExprInStatement(Statement s) => s switch { // TODO: complete everything here, only PredicateStmt is handled properly
         PredicateStmt stmt => stmt switch {
-          AssertStmt assert => new AssertStmt(assert.Origin, assert.Expr.AsProtected(), assert.Label, assert.Attributes),
-          AssumeStmt assume => new AssumeStmt(assume.Origin, assume.Expr, assume.Attributes),
-          ExpectStmt expect => new ExpectStmt(expect.Origin, expect.Expr, expect.Message, expect.Attributes),
+          AssertStmt assert => new AssertStmt(assert.Origin, assert.Expr.AsProtected(), assert.Label is null ? null : new AssertLabel(assert.Label.Tok, assert.Label.Name), cloner.CloneAttributes(assert.Attributes)),
+          AssumeStmt assume => new AssumeStmt(assume.Origin, assume.Expr.AsProtected(), cloner.CloneAttributes(assume.Attributes)),
+          ExpectStmt expect => new ExpectStmt(expect.Origin, expect.Expr.AsProtected(), cloner.CloneExpr(expect.Message), cloner.CloneAttributes(expect.Attributes)), // Protect `expect.Message`?
           _ => throw new Cce.UnreachableException(),
         },
         CalcStmt stmt => stmt,
