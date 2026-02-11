@@ -12,8 +12,7 @@ namespace DafnyCore.IncrementalCompilation {
     public ProtectToProveApplySuffix(Cloner cloner, ProtectToProveApplySuffix original) : base(cloner, original) { }
     [SyntaxConstructor]
     public ProtectToProveApplySuffix(Expression e) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
-      new(null, e),
-      //new(null, ExprReplacer.ReplaceExpr(e)),
+      new(null, e.AsProtected()),
       new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
       new(null, new SeqDisplayExpr(SourceOrigin.NoToken, [])),
     ], Token.NoToken) {
