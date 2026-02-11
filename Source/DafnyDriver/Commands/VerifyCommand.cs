@@ -88,7 +88,6 @@ public static class VerifyCommand {
       Console.WriteLine($"First \"verification\" done in {beforeSecondComp - afterFirstResolution}");
       //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();
 
-      const string fileBaseName = "new.dfy";
       string lemmaName = null!;
       Lemma firstLemma = null!;
 
@@ -125,7 +124,7 @@ public static class VerifyCommand {
         if (expressionToAssert is null or ":q") { break; }
         compilation = CliCompilation.Create(options, compilation);
         compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
-          var file = files.First(f => f.BaseName is fileBaseName);
+          var file = files.First(f => startToken.Uri == f.Uri);
           var contents = file.GetContent().Reader.ReadToEnd();
           //string expressionToAssert = "1 == 1";
           //string expressionToAssert = DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(new LiteralExpr(SourceOrigin.NoToken, true), DafnyCore.IncrementalCompilation.ProtectorFunctions.Protect).ToString();
