@@ -96,7 +96,7 @@ public static class VerifyCommand {
         .CanVerifies!.Values.SelectMany(v => v.Values).OfType<Lemma>()
         .First(l => l is { Body: not null, } && l.Name == $"_IPM_{lemmaName}");
       while (true) {
-        Console.Write("Enter Lemma you wish to work on: ");
+        Console.Write("Enter Lemma you wish to work on (or type `:q` to exit): ");
         lemmaName = Console.ReadLine()!;
         if (lemmaName is null or ":q") { return 0; }
         try {
@@ -119,7 +119,7 @@ public static class VerifyCommand {
       int absPositionFrom(string[] split, string endl, Token tok) => split[..(tok.line - 1)].Sum(s => s.Length + endl.Length) + tok.col - 1;
       writeCachingType(compilation, new AppendStatementToMethod(firstLemma));
       while (true) {
-        Console.Write("Enter assertion: ");
+        Console.Write("Enter assertion (or type `:q` to exit): ");
         var expressionToAssert = Console.ReadLine()!;
         if (expressionToAssert is null or ":q") { break; }
         compilation = CliCompilation.Create(options, compilation);
