@@ -11,9 +11,9 @@ using Microsoft.Dafny;
 namespace DafnyCore.IncrementalCompilation;
 public static class ProtectorFunctions {
   static ProtectorFunctions() {
-    Protect =        new("_protect",        null!); Protect =         Protect         with { Function = protectFunction(),        };
-    ProtectScope =   new("_protectScope",   null!); ProtectScope =    ProtectScope    with { Function = protectScopeFunction(),   };
-    ProtectToProve = new("_protectToProve", null!); ProtectToProve =  ProtectToProve  with { Function = protectToProveFunction(), };
+    Protect = new("_protect", null!); Protect = Protect with { Function = protectFunction(), };
+    ProtectScope = new("_protectScope", null!); ProtectScope = ProtectScope with { Function = protectScopeFunction(), };
+    ProtectToProve = new("_protectToProve", null!); ProtectToProve = ProtectToProve with { Function = protectToProveFunction(), };
     All = [Protect, ProtectScope, ProtectToProve];
   }
 
@@ -48,8 +48,9 @@ public static class ProtectorFunctions {
     return IdentityOf(
       typeArgs: [typeVar,],
       name: ProtectToProve.Name,
-      signature: (
-        ("x", typeVar), [
+      signature: ([
+        ("id", new IntType()),
+      ], ("x", typeVar), [
         ("name", StringType()),
         ("scope", new SeqType(new BoolType())),
       ], typeVar.ToType())
@@ -116,11 +117,11 @@ public static class ProtectorFunctions {
   );
 
   private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (FormalConstructionArgs identity, Microsoft.Dafny.Type result) signature) =>
-    IdentityOf(typeArgs, name, ([]                      , signature.identity, []                     , signature.result));
+    IdentityOf(typeArgs, name, ([], signature.identity, [], signature.result));
   private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<FormalConstructionArgs> beforeIdentity, FormalConstructionArgs identity, Microsoft.Dafny.Type result) signature) =>
-    IdentityOf(typeArgs, name, (signature.beforeIdentity, signature.identity, []                     , signature.result));
+    IdentityOf(typeArgs, name, (signature.beforeIdentity, signature.identity, [], signature.result));
   private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (FormalConstructionArgs identity, List<FormalConstructionArgs> afterIdentity, Microsoft.Dafny.Type result) signature) =>
-    IdentityOf(typeArgs, name, ([]                      , signature.identity, signature.afterIdentity, signature.result));
+    IdentityOf(typeArgs, name, ([], signature.identity, signature.afterIdentity, signature.result));
   private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<FormalConstructionArgs> beforeIdentity, FormalConstructionArgs identity, List<FormalConstructionArgs> afterIdentity, Microsoft.Dafny.Type result) signature) =>
     ProtectorFunctionBase(typeArgs, name, ([.. signature.beforeIdentity, signature.identity, .. signature.afterIdentity,], signature.result), signature.identity.Name.ToFunctionBody());
 
@@ -129,7 +130,7 @@ public static class ProtectorFunctions {
   private static Expression ToFunctionBody(this string name) => new NameSegment(SourceOrigin.NoToken, name: name, null);
   private static Formal ToFormal(this (string Name, Microsoft.Dafny.Type Type) t) => new(
     origin: SourceOrigin.NoToken,
-    nameNode: new(t.Name),
+    nameNode: t.Name.ToNameNodeWithVirtualToken(),
     syntacticType: t.Type,
     inParam: true,
     isGhost: false,

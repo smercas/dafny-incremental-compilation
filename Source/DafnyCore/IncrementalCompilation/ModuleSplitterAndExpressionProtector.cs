@@ -16,6 +16,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static readonly string Name = "_IPM";
     public static readonly string AttributeName = "ipm";
     public LiteralModuleDecl SplitAndProtect(Microsoft.Dafny.Program p) {
+      ProtectToProveApplySuffix.ResetInstances();
       Contract.Requires(p.DefaultModuleDef.SourceDecls.NoneAreOfType<ModuleExportDecl>()); // parser doesn't allow export decls in root module
       static LiteralModuleDecl MakeNewModuleWithOldRootStuff(ModuleSplitterAndExpressionProtector self, Microsoft.Dafny.Program p) {
         var def = new ModuleDefinition(
@@ -50,6 +51,7 @@ namespace DafnyCore.IncrementalCompilation {
       foreach (var g in SplitAndProtect(moduleWithOldRootStuff)) {
         p.DefaultModuleDef.SourceDecls.Add(g.Process(DafnyOptions, p.DefaultModuleDef));
       }
+      ProtectToProveApplySuffix.AssignEntryPoints();
       return moduleWithOldRootStuff;
     }
     #region helper processing classes
@@ -134,7 +136,7 @@ namespace DafnyCore.IncrementalCompilation {
             }
           }
           foreach (var arg in mof.Ins.Where(arg => arg.DefaultValue is not null)) {
-            arg.DefaultValue = arg.DefaultValue.AsProtected();
+            arg.DefaultValue = arg.DefaultValue!.AsProtected();
           }
           foreach (var req in mof.Req) {
             req.E = req.E.AsProtected();
