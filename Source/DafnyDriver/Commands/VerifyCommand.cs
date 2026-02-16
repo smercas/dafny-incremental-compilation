@@ -119,7 +119,7 @@ public static class VerifyCommand {
       int absPositionFrom(string[] split, string endl, Token tok) => split[..(tok.line - 1)].Sum(s => s.Length + endl.Length) + tok.col - 1;
       writeCachingType(compilation, new AppendStatementToMethod(firstLemma));
       while (true) {
-        Console.Write("Enter assertion (or type `:q` to exit): ");
+        Console.Write("Enter modification (or type `:q` to exit): ");
         var expressionToAssert = Console.ReadLine()!;
         if (expressionToAssert is null or ":q") { break; }
         compilation = CliCompilation.Create(options, compilation);
@@ -132,7 +132,7 @@ public static class VerifyCommand {
             const string endl = "\r\n";
             var split = contents.Split(endl);
             var endOfBody = absPositionFrom(split, endl, endToken); // position just before `}` character that closes the method body
-            contents = contents.Insert(endOfBody, $"{(contents[endOfBody - 1] == ' ' ? "" : " ")}assert {expressionToAssert}; ");
+            contents = contents.Insert(endOfBody, $"{(contents[endOfBody - 1] == ' ' ? "" : " ")}{expressionToAssert}");
             return new FileSnapshot(new StringReader(contents), null);
           };
         }); //normally this would be replaced by actually getting the file modified

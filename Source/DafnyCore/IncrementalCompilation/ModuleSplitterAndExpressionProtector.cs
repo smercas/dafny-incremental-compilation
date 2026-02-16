@@ -127,9 +127,11 @@ namespace DafnyCore.IncrementalCompilation {
         private void ProtectDuplicate(M mof) {
           static FrameExpression ReplacedFrameExpression(FrameExpression rf) => new(rf.Origin, rf.OriginalExpression.AsProtected(), rf.FieldName);
           static void ModifyAssert(AssertStmt a) {
-            if (Attributes.Contains(a.Attributes, "ipm")) {
+            if (Attributes.Contains(a.Attributes, AttributeName)) {
               //Console.WriteLine("Protecting to prove assertion " + a.Expr.ToString());
-              a.Expr = ProtectorFunctions.WrappedWith(a.Expr, ProtectorFunctions.ProtectToProve);
+              a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProve);
+            } else if (Attributes.Contains(a.Attributes, AttributeName + "_now")) {
+              a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProve with { EntryPoint = false });
             } else {
               a.Expr = a.Expr.AsProtected();
               //Console.WriteLine($"assert statement: {a.Expr}");
@@ -142,8 +144,8 @@ namespace DafnyCore.IncrementalCompilation {
             req.E = req.E.AsProtected();
           }
           foreach (var ens in mof.Ens) {
-            if (HasAttr(ens)) {
-              ens.E = ProtectorFunctions.WrappedWith(ens.E, ProtectorFunctions.ProtectToProve);
+            if (Attributes.Contains(ens.Attributes, AttributeName)) {
+              ens.E = ens.E.WrappedWith(ProtectorFunctions.ProtectToProve);
             } else {
               ens.E = ens.E.AsProtected();
             }

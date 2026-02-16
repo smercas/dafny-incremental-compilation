@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace DafnyCore.IncrementalCompilation {
   internal class ProtectToProveApplySuffix : ApplySuffix, ICloneable<ProtectToProveApplySuffix> {
-    private static Comparer<ProtectToProveApplySuffix> comparer = Comparer<ProtectToProveApplySuffix>.Create((l, r) => {
+    private static Comparer<ProtectToProveApplySuffix> comparer { get; } = Comparer<ProtectToProveApplySuffix>.Create((l, r) => {
       int cmp = string.Compare(l.Origin.Uri.AbsoluteUri, r.Origin.Uri.AbsoluteUri);
       if (cmp != 0) { return cmp; }
       cmp = l.Origin.line.CompareTo(r.Origin.line);
@@ -22,7 +22,7 @@ namespace DafnyCore.IncrementalCompilation {
     }
     public static void AssignEntryPoints() {
       foreach (var (instance, idx) in instances.Indexed()) {
-        instance.Actuals.OfType<LiteralExpr>().First(a => a.Value is BigInteger i && i == BigInteger.Zero).Value = new BigInteger(idx);
+        (instance.Bindings.ArgumentBindings.First(b => b.FormalParameterName == ProtectorFunctions.ProtectToProve.Function.Ins[^1].NameNode.Origin).Actual as LiteralExpr)!.Value = new BigInteger(idx + 1);
       }
     }
     private static SortedSet<ProtectToProveApplySuffix> instances { get; set; } = new(comparer);
@@ -30,14 +30,16 @@ namespace DafnyCore.IncrementalCompilation {
     ProtectToProveApplySuffix ICloneable<ProtectToProveApplySuffix>.Clone(Cloner cloner) => new(cloner, this);
     public ProtectToProveApplySuffix(Cloner cloner, ProtectToProveApplySuffix original) : base(cloner, original) { }
     [SyntaxConstructor]
-    public ProtectToProveApplySuffix(Expression e) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
-      new(null, new LiteralExpr(SourceOrigin.NoToken, 0)),
+    public ProtectToProveApplySuffix(Expression e, bool withEntryPoint) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
       new(null, e.AsProtected()),
       new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
       new(null, new SeqDisplayExpr(SourceOrigin.NoToken, [])),
     ], Token.NoToken) {
       Contract.Ensures(IsValidPreResolve);
-      instances.Add(this);
+      if (withEntryPoint) {
+        Bindings.ArgumentBindings.Add(new(ProtectorFunctions.ProtectToProve.Function.Ins[^1].NameNode.Origin, new LiteralExpr(SourceOrigin.NoToken, 0)));
+        instances.Add(this);
+      }
     }
     private IEnumerable<Expression> Actuals => Bindings.ArgumentBindings.Select(ab => ab.Actual);
     public bool IsValidPreResolve => Bindings.ArgumentBindings is [{ }, { }, { Actual: SeqDisplayExpr { Elements: [] } }];

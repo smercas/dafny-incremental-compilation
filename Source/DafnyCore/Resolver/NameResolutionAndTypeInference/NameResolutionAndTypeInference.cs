@@ -18,6 +18,7 @@ using DafnyCore;
 using JetBrains.Annotations;
 using Microsoft.BaseTypes;
 using Microsoft.Dafny.Plugins;
+using DafnyCore.IncrementalCompilation;
 
 namespace Microsoft.Dafny {
   public partial class ModuleResolver {
@@ -6202,7 +6203,7 @@ namespace Microsoft.Dafny {
     }
 
     IEnumerable<Expression> INewOrOldResolver.ScopeArgsFrom(ResolutionContext context) {
-      return Scope.Names.IgnoreNulls().Distinct().Select(s => DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(s, DafnyCore.IncrementalCompilation.ProtectorFunctions.ProtectScope));
+      return Scope.Names.IgnoreNulls().Distinct().Select(s => s.WrappedWith(ProtectorFunctions.ProtectScope));
     }
     public MethodCallInformation ResolveApplySuffix(ApplySuffix e, ResolutionContext resolutionContext, bool allowMethodCall) {
       Contract.Requires(e != null);

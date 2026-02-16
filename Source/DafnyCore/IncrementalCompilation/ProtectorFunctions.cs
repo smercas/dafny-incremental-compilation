@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using FormalConstructionArgs = (string Name, Microsoft.Dafny.NodeWithOrigin Type);
 using System.Diagnostics;
 using Microsoft.Dafny;
 
@@ -23,8 +22,8 @@ public static class ProtectorFunctions {
       typeArgs: [typeVar,],
       name: Protect.Name,
       signature: (
-        ("x", typeVar), [
-        ("name", StringType()),
+        ("x", typeVar).ToFormal(), [
+        ("name", StringType()).ToFormal(),
       ], typeVar.ToType())
     );
   }
@@ -34,8 +33,8 @@ public static class ProtectorFunctions {
       typeArgs: [typeVar,],
       name: ProtectScope.Name,
       signature: ([
-        ("x", typeVar),
-        ("name", StringType()),
+        ("x", typeVar).ToFormal(),
+        ("name", StringType()).ToFormal(),
       ], new BoolType()),
       body: new LiteralExpr(
         origin: SourceOrigin.NoToken,
@@ -48,11 +47,10 @@ public static class ProtectorFunctions {
     return IdentityOf(
       typeArgs: [typeVar,],
       name: ProtectToProve.Name,
-      signature: ([
-        ("id", new IntType()),
-      ], ("x", typeVar), [
-        ("name", StringType()),
-        ("scope", new SeqType(new BoolType())),
+      signature: (("x", typeVar).ToFormal(), [
+        ("name", StringType()).ToFormal(),
+        ("scope", new SeqType(new BoolType())).ToFormal(),
+        ("id", new IntType()).ToFormal(defaultValue: new LiteralExpr(SourceOrigin.NoToken, 0), isNameOnly: true),
       ], typeVar.ToType())
     );
   }
@@ -63,8 +61,8 @@ public static class ProtectorFunctions {
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, expression.ToString(), false)),
       ], Token.NoToken);
     }
-    if (ReferenceEquals(protectorFunction, ProtectToProve)) {
-      return new ProtectToProveApplySuffix(expression);
+    if (protectorFunction is ProtectToProveFunction ptpf) {
+      return new ProtectToProveApplySuffix(expression, ptpf.EntryPoint);
     }
     throw new ArgumentException("\"protectorFunction\" needs to be either `_protect` or `_protectToProve`");
   }
@@ -78,15 +76,16 @@ public static class ProtectorFunctions {
     throw new ArgumentException("\"protectorFunction\" needs to be `_protectScope`");
   }
 
-  public sealed record ProtectorFunction(string Name, Function Function);
+  public record ProtectorFunction(string Name, Function Function);
+  public sealed record ProtectToProveFunction(string Name, Function Function, bool EntryPoint = true) : ProtectorFunction(Name, Function);
 
   public static readonly ProtectorFunction Protect;
   public static readonly ProtectorFunction ProtectScope;
-  public static readonly ProtectorFunction ProtectToProve;
+  public static readonly ProtectToProveFunction ProtectToProve;
   public static readonly ICollection<ProtectorFunction> All;
   public static readonly string ContainingModuleName = "_protectors";
 
-  private static Function ProtectorFunctionBase(List<TypeParameter> typeArgs, string name, (List<FormalConstructionArgs> args, Microsoft.Dafny.Type result) signature, Expression body) => new(
+  private static Function ProtectorFunctionBase(List<TypeParameter> typeArgs, string name, (List<Formal> args, Microsoft.Dafny.Type result) signature, Expression body) => new(
     origin: new Token(),
     // can't use SourceOrigin.NoToken because ref. eq. to it
     // is used to ensure that DefaultModuleDefinitions are verified;
@@ -96,11 +95,7 @@ public static class ProtectorFunctions {
     isGhost: true,
     isOpaque: true,
     typeArgs: typeArgs,
-    ins: signature.args.ConvertAll(fca => (fca.Name, fca.Type switch {
-      Microsoft.Dafny.Type t => t,
-      TypeParameter tp => new UserDefinedType(tp),
-      _ => throw new ArgumentException("not `Type` or `TypeParameter`"),
-    }).ToFormal()),
+    ins: signature.args,
     result: null,
     resultType: signature.result,
     req: [],
@@ -116,28 +111,31 @@ public static class ProtectorFunctions {
     signatureEllipsis: null
   );
 
-  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (FormalConstructionArgs identity, Microsoft.Dafny.Type result) signature) =>
+  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (Formal identity, Microsoft.Dafny.Type result) signature) =>
     IdentityOf(typeArgs, name, ([], signature.identity, [], signature.result));
-  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<FormalConstructionArgs> beforeIdentity, FormalConstructionArgs identity, Microsoft.Dafny.Type result) signature) =>
+  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<Formal> beforeIdentity, Formal identity, Microsoft.Dafny.Type result) signature) =>
     IdentityOf(typeArgs, name, (signature.beforeIdentity, signature.identity, [], signature.result));
-  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (FormalConstructionArgs identity, List<FormalConstructionArgs> afterIdentity, Microsoft.Dafny.Type result) signature) =>
+  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (Formal identity, List<Formal> afterIdentity, Microsoft.Dafny.Type result) signature) =>
     IdentityOf(typeArgs, name, ([], signature.identity, signature.afterIdentity, signature.result));
-  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<FormalConstructionArgs> beforeIdentity, FormalConstructionArgs identity, List<FormalConstructionArgs> afterIdentity, Microsoft.Dafny.Type result) signature) =>
+  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<Formal> beforeIdentity, Formal identity, List<Formal> afterIdentity, Microsoft.Dafny.Type result) signature) =>
     ProtectorFunctionBase(typeArgs, name, ([.. signature.beforeIdentity, signature.identity, .. signature.afterIdentity,], signature.result), signature.identity.Name.ToFunctionBody());
 
   private static Microsoft.Dafny.Type StringType() => new UserDefinedType(origin: SourceOrigin.NoToken, name: "string", optTypeArgs: null);
 
   private static Expression ToFunctionBody(this string name) => new NameSegment(SourceOrigin.NoToken, name: name, null);
-  private static Formal ToFormal(this (string Name, Microsoft.Dafny.Type Type) t) => new(
+  private static Formal ToFormal(this (string Name, TypeParameter TypeParameter) t, bool isGhost = false, Expression? defaultValue = null, bool isNameOnly = false) =>
+    (t.Name, t.TypeParameter.ToType()).ToFormal(isGhost, defaultValue, isNameOnly);
+
+  private static Formal ToFormal(this (string Name, Microsoft.Dafny.Type Type) t, bool isGhost = false, Expression? defaultValue = null, bool isNameOnly = false) => new(
     origin: SourceOrigin.NoToken,
     nameNode: t.Name.ToNameNodeWithVirtualToken(),
     syntacticType: t.Type,
     inParam: true,
-    isGhost: false,
-    defaultValue: null,
+    isGhost: isGhost,
+    defaultValue: defaultValue,
     attributes: null,
     isOld: false,
-    isNameOnly: false,
+    isNameOnly: isNameOnly,
     isOlder: false,
     nameForCompilation: null
   );
