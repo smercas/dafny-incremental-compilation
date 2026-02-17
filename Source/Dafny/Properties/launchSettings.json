@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Dafny": {
+      "commandName": "Project",
+      "commandLineArgs": "verify\r\n\"..\\..\\big-ahh-inc-comp-test\\new.dfy\"\r\n--boogie /noVerify\r\n--solver-log \"..\\..\\big-ahh-inc-comp-test\\o\\new_old_@PROC@.smt2\"\r\n--bprint \"..\\..\\big-ahh-inc-comp-test\\o\\new_old.bpl\"\r\n--verification-time-limit 0"
+    }
+  }
+}
