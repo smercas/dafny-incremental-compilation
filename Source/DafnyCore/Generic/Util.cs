@@ -68,6 +68,9 @@ namespace Microsoft.Dafny {
         yield return result;
       }
     }
+
+    public static List<R> ConvertAllWhere<T, R>(this List<T> l, Func<T, (bool, R)> f) => new(l.SelectWhere(f));
+
     public static R? ApplyIfNotNull<T, R>(this T? t, Func<T, R> f) where R : class => t is null ? null : f(t);
     public static IEnumerable<T?> MappedToNulls<T>(this IEnumerable<T> es) where T : class => es.Select<T, T?>(static _ => null);
     #region Task.Then

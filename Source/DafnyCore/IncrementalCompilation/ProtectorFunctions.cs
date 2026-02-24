@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using Microsoft.Dafny;
+using System.Numerics;
 
 namespace DafnyCore.IncrementalCompilation;
 public static class ProtectorFunctions {
@@ -13,7 +14,8 @@ public static class ProtectorFunctions {
     Protect = new("_protect", null!); Protect = Protect with { Function = protectFunction(), };
     ProtectScope = new("_protectScope", null!); ProtectScope = ProtectScope with { Function = protectScopeFunction(), };
     ProtectToProve = new("_protectToProve", null!); ProtectToProve = ProtectToProve with { Function = protectToProveFunction(), };
-    All = [Protect, ProtectScope, ProtectToProve];
+    ProtectToProveImmediate = new("_protectToProveImmediate", null!, BigInteger.Zero); ProtectToProveImmediate = ProtectToProveImmediate with { Function = protectToProveImmediateFunction(), };
+    All = [Protect, ProtectScope, ProtectToProve, ProtectToProveImmediate];
   }
 
   private static Function protectFunction() {
@@ -50,7 +52,19 @@ public static class ProtectorFunctions {
       signature: (("x", typeVar).ToFormal(), [
         ("name", StringType()).ToFormal(),
         ("scope", new SeqType(new BoolType())).ToFormal(),
-        ("id", new IntType()).ToFormal(defaultValue: new LiteralExpr(SourceOrigin.NoToken, 0), isNameOnly: true),
+        ("id", new IntType()).ToFormal(),
+      ], typeVar.ToType())
+    );
+  }
+  private static Function protectToProveImmediateFunction() {
+    var typeVar = "T".ToTypeParameter();
+    return IdentityOf(
+      typeArgs: [typeVar,],
+      name: ProtectToProveImmediate.Name,
+      signature: (("x", typeVar).ToFormal(), [
+        ("name", StringType()).ToFormal(),
+        ("scope", new SeqType(new BoolType())).ToFormal(),
+        ("id", new IntType()).ToFormal(),
       ], typeVar.ToType())
     );
   }
@@ -61,8 +75,11 @@ public static class ProtectorFunctions {
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, expression.ToString(), false)),
       ], Token.NoToken);
     }
-    if (protectorFunction is ProtectToProveFunction ptpf) {
-      return new ProtectToProveApplySuffix(expression, ptpf.EntryPoint);
+    if (ReferenceEquals(protectorFunction, ProtectToProve)) {
+      return new ProtectToProveApplySuffix(expression);
+    }
+    if (protectorFunction is ProtectorFunction.WithEntryPoint { EntryPoint: var entryPoint }) {
+      return new ProtectToProveApplySuffix(expression, entryPoint);
     }
     throw new ArgumentException("\"protectorFunction\" needs to be either `_protect` or `_protectToProve`");
   }
@@ -76,12 +93,14 @@ public static class ProtectorFunctions {
     throw new ArgumentException("\"protectorFunction\" needs to be `_protectScope`");
   }
 
-  public record ProtectorFunction(string Name, Function Function);
-  public sealed record ProtectToProveFunction(string Name, Function Function, bool EntryPoint = true) : ProtectorFunction(Name, Function);
+  public record ProtectorFunction(string Name, Function Function) {
+    public sealed record WithEntryPoint(string Name, Function Function, BigInteger EntryPoint) : ProtectorFunction(Name, Function);
+  }
 
   public static readonly ProtectorFunction Protect;
   public static readonly ProtectorFunction ProtectScope;
-  public static readonly ProtectToProveFunction ProtectToProve;
+  public static readonly ProtectorFunction ProtectToProve;
+  public static readonly ProtectorFunction.WithEntryPoint ProtectToProveImmediate;
   public static readonly ICollection<ProtectorFunction> All;
   public static readonly string ContainingModuleName = "_protectors";
 

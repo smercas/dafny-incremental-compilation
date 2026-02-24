@@ -11,17 +11,10 @@ using Microsoft.Boogie;
 namespace DafnyCore.IncrementalCompilation {
   internal class ProtectorsImporter(DafnyOptions afnyOptions) {
     private DafnyOptions dafnyOptions = afnyOptions;
-    private AliasModuleDecl ImportDecl(ModuleDefinition parent) => new(
-      dafnyOptions,
-      new(Microsoft.Dafny.Token.NoToken, Microsoft.Dafny.Token.NoToken),
-      new([ new(new Microsoft.Dafny.Token() { val = ProtectorFunctions.ContainingModuleName }, ProtectorFunctions.ContainingModuleName) ]),
-      new(ProtectorFunctions.ContainingModuleName),
-      null,
-      parent,
-      opened: false,
-      [],
-      Guid.NewGuid()
-    );
+    private AliasModuleDecl ImportDecl(ModuleDefinition parent) {
+      Name name = ProtectorFunctions.ContainingModuleName.ToNameNodeWithVirtualToken();
+      return new(dafnyOptions, new(Microsoft.Dafny.Token.NoToken, Microsoft.Dafny.Token.NoToken), new([name]), name, null, parent, opened: false, [], Guid.NewGuid());
+    }
 
     public void ImportIn(Microsoft.Dafny.Program p) => p.DefaultModuleDef.SourceDecls.OfType<LiteralModuleDecl>().Where(lmd => lmd.ModuleDef.Implements is null).ForEach(ImportIn);
     public void ImportIn(LiteralModuleDecl md) {

@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Boogie;
@@ -130,8 +131,10 @@ namespace DafnyCore.IncrementalCompilation {
             if (Attributes.Contains(a.Attributes, AttributeName)) {
               //Console.WriteLine("Protecting to prove assertion " + a.Expr.ToString());
               a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProve);
-            } else if (Attributes.Contains(a.Attributes, AttributeName + "_now")) {
-              a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProve with { EntryPoint = false });
+            } else if (Attributes.Find(a.Attributes, AttributeName + "_now") is { } attr) {
+              if (attr is not { Args: [var arg] }) { throw new Exception($"the {{:{AttributeName}_now}} attribute requires an argument"); }
+              if (arg is not Microsoft.Dafny.LiteralExpr { Value: BigInteger entryPoint }) { throw new Exception($"{{:{AttributeName}_now}}'s argument needs to be a natural number"); }
+              a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProveImmediate with { EntryPoint = entryPoint });
             } else {
               a.Expr = a.Expr.AsProtected();
               //Console.WriteLine($"assert statement: {a.Expr}");

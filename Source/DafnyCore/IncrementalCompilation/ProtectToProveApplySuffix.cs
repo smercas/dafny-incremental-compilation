@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace DafnyCore.IncrementalCompilation {
-  internal class ProtectToProveApplySuffix : ApplySuffix, ICloneable<ProtectToProveApplySuffix> {
+  internal class ProtectToProveApplySuffix : ApplySuffix {
     private static Comparer<ProtectToProveApplySuffix> comparer { get; } = Comparer<ProtectToProveApplySuffix>.Create((l, r) => {
       int cmp = string.Compare(l.Origin.Uri.AbsoluteUri, r.Origin.Uri.AbsoluteUri);
       if (cmp != 0) { return cmp; }
@@ -22,27 +22,37 @@ namespace DafnyCore.IncrementalCompilation {
     }
     public static void AssignEntryPoints() {
       foreach (var (instance, idx) in instances.Indexed()) {
-        (instance.Bindings.ArgumentBindings.First(b => b.FormalParameterName == ProtectorFunctions.ProtectToProve.Function.Ins[^1].NameNode.Origin).Actual as LiteralExpr)!.Value = new BigInteger(idx + 1);
+        instance.Bindings.ArgumentBindings.First(ab => ReferenceEquals(ab.Actual, PlaceholderId)).Actual = new LiteralExpr(SourceOrigin.NoToken, new BigInteger(idx));
       }
     }
     private static SortedSet<ProtectToProveApplySuffix> instances { get; set; } = new(comparer);
     public static IReadOnlySet<ProtectToProveApplySuffix> Instances => instances;
-    ProtectToProveApplySuffix ICloneable<ProtectToProveApplySuffix>.Clone(Cloner cloner) => new(cloner, this);
-    public ProtectToProveApplySuffix(Cloner cloner, ProtectToProveApplySuffix original) : base(cloner, original) { }
+
+    private static readonly Expression PlaceholderScope = new SeqDisplayExpr(SourceOrigin.NoToken, []);
+    private static readonly Expression PlaceholderId = new LiteralExpr(SourceOrigin.NoToken);
+
     [SyntaxConstructor]
-    public ProtectToProveApplySuffix(Expression e, bool withEntryPoint) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
-      new(null, e.AsProtected()),
-      new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
-      new(null, new SeqDisplayExpr(SourceOrigin.NoToken, [])),
-    ], Token.NoToken) {
+    public ProtectToProveApplySuffix(Expression e) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
+        new(null, e.AsProtected()),
+        new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
+        new(null, PlaceholderScope),
+        new(null, PlaceholderId),
+      ], Token.NoToken
+    ) {
       Contract.Ensures(IsValidPreResolve);
-      if (withEntryPoint) {
-        Bindings.ArgumentBindings.Add(new(ProtectorFunctions.ProtectToProve.Function.Ins[^1].NameNode.Origin, new LiteralExpr(SourceOrigin.NoToken, 0)));
-        instances.Add(this);
-      }
+      instances.Add(this);
     }
-    private IEnumerable<Expression> Actuals => Bindings.ArgumentBindings.Select(ab => ab.Actual);
-    public bool IsValidPreResolve => Bindings.ArgumentBindings is [{ }, { }, { Actual: SeqDisplayExpr { Elements: [] } }];
+    public ProtectToProveApplySuffix(Expression e, BigInteger immediateOrder) : base(e.Origin, null,
+      ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
+        new(null, e.AsProtected()),
+        new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
+        new(null, PlaceholderScope),
+        new(null, new LiteralExpr(SourceOrigin.NoToken, immediateOrder)),
+      ], Token.NoToken
+    ) {
+      Contract.Ensures(IsValidPreResolve);
+    }
+    public bool IsValidPreResolve => Bindings.ArgumentBindings is [_, _, { Actual: SeqDisplayExpr { Elements: [] } }, _];
     internal void AddScopeArgs(INewOrOldResolver resolver, ResolutionContext context) {
       Contract.Requires(IsValidPreResolve);
       //static List<T?> getThingsFromScope<T>(Scope<T> s) where T : class =>
@@ -58,7 +68,7 @@ namespace DafnyCore.IncrementalCompilation {
       //  ns.Type = id.Type.UseInternalSynonym();
       //  return e;
       //}));
-      Actuals.OfType<SeqDisplayExpr>().First().Elements.AddRange(resolver.ScopeArgsFrom(context));
+      Bindings.ArgumentBindings.First(ab => ReferenceEquals(ab.Actual, PlaceholderScope)).Actual = new SeqDisplayExpr(SourceOrigin.NoToken, [.. resolver.ScopeArgsFrom(context)]);
       //System.Console.WriteLine('[' + string.Join(", ", Seq.Elements) + ']');
     }
   }
