@@ -13,6 +13,7 @@ using System.IO;
 using System.Linq;
 using System.Reactive.Subjects;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -116,7 +117,7 @@ public static class VerifyCommand {
       void writeCachingType(CliCompilation compilation, IncCompModifications? modification) {
         options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(modification));
       }
-      int absPositionFrom(string[] split, string endl, Token tok) => split[..(tok.line - 1)].Sum(s => s.Length + endl.Length) + tok.col - 1;
+      int absPositionFrom(string[] split, Token tok) => split[..(tok.line - 1)].Sum(s => s.Length) + tok.col - 1;
       writeCachingType(compilation, new AppendStatementToMethod(firstLemma));
       while (true) {
         Console.Write("Enter modification (or type `:q` to exit): ");
@@ -126,13 +127,11 @@ public static class VerifyCommand {
         compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
           var file = files.First(f => startToken.Uri == f.Uri);
           var contents = file.GetContent().Reader.ReadToEnd();
+          var endOfBody = absPositionFrom(Regex.Split(contents, @"(?<=\r\n|\n|\r)"), endToken); // position just before `}` character that closes the method body
+          contents = contents.Insert(endOfBody, $"{(contents[endOfBody - 1] == ' ' ? "" : " ")}{modification}");
           //string expressionToAssert = "1 == 1";
           //string expressionToAssert = DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(new LiteralExpr(SourceOrigin.NoToken, true), DafnyCore.IncrementalCompilation.ProtectorFunctions.Protect).ToString();
           file.GetContent = () => {
-            const string endl = "\r\n";
-            var split = contents.Split(endl);
-            var endOfBody = absPositionFrom(split, endl, endToken); // position just before `}` character that closes the method body
-            contents = contents.Insert(endOfBody, $"{(contents[endOfBody - 1] == ' ' ? "" : " ")}{modification}");
             return new FileSnapshot(new StringReader(contents), null);
           };
         }); //normally this would be replaced by actually getting the file modified
