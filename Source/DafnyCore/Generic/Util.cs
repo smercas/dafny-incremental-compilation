@@ -25,8 +25,13 @@ namespace Microsoft.Dafny {
     }
   }
 
-  public static class Util {
+  public static partial class Util {
 #nullable enable
+
+    [GeneratedRegex(@".*?(?:\r\n|\n|\r|$)")]
+    public static partial Regex AllEndlineRegex();
+    public static IEnumerable<string> SplitIntoLinesAndKeepLineEndings(this string contents) => AllEndlineRegex().Matches(contents).Select(m => m.Value);
+
 
     public static IEnumerable<Statement> PreResolveRecursiveSubStatements(this Expression e) => e switch {
       StmtExpr se => Concat(se.S.PreResolveRecursiveSubStatements(), se.E.PreResolveRecursiveSubStatements()),

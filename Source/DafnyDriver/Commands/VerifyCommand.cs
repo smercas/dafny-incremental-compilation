@@ -62,7 +62,6 @@ public static class VerifyCommand {
 
   public static async Task<int> HandleVerification(DafnyOptions options) {
     options.NormalizeNames = false;
-    var beforeFirstComp = DateTime.Now;
     if (options.Get(CommonOptionBag.VerificationCoverageReport) != null) {
       options.TrackVerificationCoverage = true;
     }
@@ -71,8 +70,6 @@ public static class VerifyCommand {
     compilation.Start();
 
     var resolution = await compilation.Resolution;
-    var afterFirstResolution = DateTime.Now;
-    Console.WriteLine($"First resolution done in {afterFirstResolution - beforeFirstComp}");
     if (resolution is { HasErrors: false }) {
       Subject<CanVerifyResult> verificationResults = new();
 
@@ -85,49 +82,55 @@ public static class VerifyCommand {
       await verificationResultsLogged;
       await proofDependenciesReported;
 
-      var beforeSecondComp = DateTime.Now;
-      Console.WriteLine($"First \"verification\" done in {beforeSecondComp - afterFirstResolution}");
       //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();
 
       string lemmaName = null!;
       Lemma firstLemma = null!;
-
+      async Task Write(string message) {
+        await using var trailer = options.OutputWriter.StatusWriter();
+        await trailer.WriteAsync(message);
+      }
+      async Task WriteLine(string message) {
+        await using var trailer = options.OutputWriter.StatusWriter();
+        await trailer.WriteLineAsync(message);
+      }
       async Task<Lemma> getLemmaFrom(CliCompilation compilation) => (await compilation.Resolution)!
         //.CanVerifies![(await compilation.Compilation.RootFiles).First(f => f.BaseName is fileBaseName).Uri]
         .CanVerifies!.Values.SelectMany(v => v.Values).OfType<Lemma>()
         .First(l => l is { Body: not null, } && l.Name == $"_IPM_{lemmaName}");
       while (true) {
-        Console.Write("Enter Lemma you wish to work on (or type `:q` to exit): ");
-        lemmaName = Console.ReadLine()!;
+
+        await Write("Enter Lemma you wish to work on (or type `:q` to exit): ");
+        lemmaName = (await options.Input.ReadLineAsync())!;
         if (lemmaName is null or ":q") { return await compilation.GetAndReportExitCode(); }
         try {
           firstLemma = await getLemmaFrom(compilation);
           break;
         } catch (InvalidOperationException ex) {
           if (ex.Message is "Sequence contains no matching element") {
-            Console.WriteLine($"No lemma named `{lemmaName}` exists in the current program");
+            await WriteLine($"No lemma named `{lemmaName}` exists in the current program");
           } else {
-            Console.WriteLine($"Error: {ex.Message}");
+            await WriteLine($"Error: {ex.Message}");
           }
         } catch (Exception ex) {
-          Console.WriteLine($"Error: {ex.Message}");
+          await WriteLine($"Error: {ex.Message}");
         }
       }
       var (startToken, endToken) = (firstLemma.StartToken, firstLemma.EndToken);
       void writeCachingType(CliCompilation compilation, IncCompModifications? modification) {
         options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(modification));
       }
-      int absPositionFrom(string[] split, Token tok) => split[..(tok.line - 1)].Sum(s => s.Length) + tok.col - 1;
+      int absPositionFrom(IEnumerable<string> split, Token tok) => split.Take(tok.line - 1).Sum(s => s.Length) + tok.col - 1;
       writeCachingType(compilation, new AppendStatementToMethod(firstLemma));
       while (true) {
-        Console.Write("Enter modification (or type `:q` to exit): ");
-        var modification = Console.ReadLine()!;
+        await Write("Enter modification (or type `:q` to exit): ");
+        var modification = (await options.Input.ReadLineAsync())!;
         if (modification is null or ":q") { break; }
         compilation = CliCompilation.Create(options, compilation);
         compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
           var file = files.First(f => startToken.Uri == f.Uri);
           var contents = file.GetContent().Reader.ReadToEnd();
-          var endOfBody = absPositionFrom(Regex.Split(contents, @"(?<=\r\n|\n|\r)"), endToken); // position just before `}` character that closes the method body
+          var endOfBody = absPositionFrom(contents.SplitIntoLinesAndKeepLineEndings(), endToken); // position just before `}` character that closes the method body
           contents = contents.Insert(endOfBody, $"{(contents[endOfBody - 1] == ' ' ? "" : " ")}{modification}");
           //string expressionToAssert = "1 == 1";
           //string expressionToAssert = DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(new LiteralExpr(SourceOrigin.NoToken, true), DafnyCore.IncrementalCompilation.ProtectorFunctions.Protect).ToString();
@@ -137,7 +140,6 @@ public static class VerifyCommand {
         }); //normally this would be replaced by actually getting the file modified
         compilation.Start();
         resolution = await compilation.Resolution;
-        var afterSecondResolution = DateTime.Now;
 
         if (resolution is { HasErrors: false }) {
           writeCachingType(compilation, new AppendStatementToMethod(await getLemmaFrom(compilation)));
@@ -152,7 +154,11 @@ public static class VerifyCommand {
           await verificationSummarized;
           await verificationResultsLogged;
           await proofDependenciesReported;
-          Console.WriteLine($"Second \"verification\" done in {DateTime.Now - afterSecondResolution}");
+          var bplFile = DafnyMain.BoogieProgramSuffix(options.PrintFile, firstLemma.SanitizedName);
+          await using (var trailer = options.OutputWriter.StatusWriter()) {
+            await trailer.WriteLineAsync($"{new FileInfo(bplFile).Length} | {File.ReadAllBytes(bplFile).Length}");
+          }
+          //new Printer(options.BaseOutputWriter, options).PrintProgram(resolution.ResolvedProgram, true);
         }
         //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();
       }

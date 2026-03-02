@@ -132,6 +132,7 @@ namespace DafnyCore.IncrementalCompilation {
               //Console.WriteLine("Protecting to prove assertion " + a.Expr.ToString());
               a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProve);
             } else if (Attributes.Find(a.Attributes, AttributeName + "_now") is { } attr) {
+              if (attr is { Args: [] }) { attr.Args.Add(new Microsoft.Dafny.LiteralExpr(SourceOrigin.NoToken, 0)); } // temporary bcs frontend doesn't use {:ipm_now 0} yet
               if (attr is not { Args: [var arg] }) { throw new Exception($"the {{:{AttributeName}_now}} attribute requires an argument"); }
               if (arg is not Microsoft.Dafny.LiteralExpr { Value: BigInteger entryPoint }) { throw new Exception($"{{:{AttributeName}_now}}'s argument needs to be a natural number"); }
               a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProveImmediate with { EntryPoint = entryPoint });
