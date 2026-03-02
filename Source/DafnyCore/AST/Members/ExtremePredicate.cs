@@ -47,7 +47,7 @@ public abstract class ExtremePredicate : Function {
     return prefixPredCall;
   }
 }
-
+#nullable disable
 public class LeastPredicate : ExtremePredicate {
   public override string WhatKind => "least predicate";
   public LeastPredicate(IOrigin rangeOrigin, Name nameNode, bool hasStaticKeyword, bool isOpaque, KType typeOfK,

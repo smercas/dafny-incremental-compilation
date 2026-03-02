@@ -31,6 +31,8 @@ public class Lemma : Method {
   public override bool AllowsAllocation => false;
 }
 
+#nullable disable
+
 public class TwoStateLemma : Method {
   public override string WhatKind => "twostate lemma";
   public override string WhatKindMentionGhost => WhatKind;

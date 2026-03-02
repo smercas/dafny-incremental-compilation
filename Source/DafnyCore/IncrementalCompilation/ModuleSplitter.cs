@@ -12,14 +12,14 @@ using Microsoft.Boogie;
 using Microsoft.Dafny;
 
 namespace DafnyCore.IncrementalCompilation {
-  internal class ModuleSplitterAndExpressionProtector(DafnyOptions dafnyOptions) {
+  internal class ModuleSplitter(DafnyOptions dafnyOptions) {
     private DafnyOptions DafnyOptions => dafnyOptions;
     public static readonly string Name = "_IPM";
     public static readonly string AttributeName = "ipm";
-    public LiteralModuleDecl SplitAndProtect(Microsoft.Dafny.Program p) {
-      ProtectToProveApplySuffix.ResetInstances();
+    public static readonly string ImmediateAttributeName = $"{AttributeName}_now";
+    public LiteralModuleDecl Split(Microsoft.Dafny.Program p) {
       Contract.Requires(p.DefaultModuleDef.SourceDecls.NoneAreOfType<ModuleExportDecl>()); // parser doesn't allow export decls in root module
-      static LiteralModuleDecl MakeNewModuleWithOldRootStuff(ModuleSplitterAndExpressionProtector self, Microsoft.Dafny.Program p) {
+      static LiteralModuleDecl MakeNewModuleWithOldRootStuff(ModuleSplitter self, Microsoft.Dafny.Program p) {
         var def = new ModuleDefinition(
           p.DefaultModuleDef.Origin,
           Name.ToNameNodeWithVirtualToken(),
@@ -49,10 +49,9 @@ namespace DafnyCore.IncrementalCompilation {
       p.DefaultModuleDef.DefaultClass!.Members.Clear();
       p.DefaultModuleDef.DefaultClass.SetMembersBeforeResolution();
 
-      foreach (var g in SplitAndProtect(moduleWithOldRootStuff)) {
+      foreach (var g in Split(moduleWithOldRootStuff)) {
         p.DefaultModuleDef.SourceDecls.Add(g.Process(DafnyOptions, p.DefaultModuleDef));
       }
-      ProtectToProveApplySuffix.AssignEntryPoints();
       return moduleWithOldRootStuff;
     }
     #region helper processing classes
@@ -114,59 +113,22 @@ namespace DafnyCore.IncrementalCompilation {
           return ncf;
         }
       }
-      public class FromMethodOrFunction<E, M>(E enclosingDecl, M methodOrFunction, IReadOnlySet<AttributedExpression> contractWithAttr, IReadOnlySet<AssertStmt> assertsWithAttr) : FromMemberDecl<E, M>(enclosingDecl, methodOrFunction) where E : TopLevelDeclWithMembers where M : MethodOrFunction {
-        private IReadOnlySet<AttributedExpression> ContractWithAttr { get; } = contractWithAttr;
-        private IReadOnlySet<AssertStmt> AssertsWithAttr { get; } = assertsWithAttr;
+      public class FromMethodOrFunction<E, M>(E enclosingDecl, M methodOrFunction, IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> attrInContract, IReadOnlySet<AttributesAccessor> attrInBody) : FromMemberDecl<E, M>(enclosingDecl, methodOrFunction) where E : TopLevelDeclWithMembers where M : MethodOrFunction {
+        private IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> AttrInContract { get; } = attrInContract;
+        private IReadOnlySet<AttributesAccessor> AttrInBody { get; } = attrInBody;
         private void AlterOriginalMemberDecl() {
-          foreach (var attributedExpression in ContractWithAttr) {
-            (attributedExpression.Attributes, _) = Attributes.WithoutFirstOccurenceOf(attributedExpression.Attributes, AttributeName);
+          foreach (var acc in Microsoft.Dafny.Util.Concat(AttrInContract.Values.SelectMany(v => v), AttrInBody)) {
+            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, AttributeName);
           }
-          foreach (var assert in AssertsWithAttr) {
-            (assert.Attributes, _) = Attributes.WithoutFirstOccurenceOf(assert.Attributes, AttributeName);
-          }
-        }
-        private void ProtectDuplicate(M mof) {
-          static FrameExpression ReplacedFrameExpression(FrameExpression rf) => new(rf.Origin, rf.OriginalExpression.AsProtected(), rf.FieldName);
-          static void ModifyAssert(AssertStmt a) {
-            if (Attributes.Contains(a.Attributes, AttributeName)) {
-              //Console.WriteLine("Protecting to prove assertion " + a.Expr.ToString());
-              a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProve);
-            } else if (Attributes.Find(a.Attributes, AttributeName + "_now") is { } attr) {
-              if (attr is { Args: [] }) { attr.Args.Add(new Microsoft.Dafny.LiteralExpr(SourceOrigin.NoToken, 0)); } // temporary bcs frontend doesn't use {:ipm_now 0} yet
-              if (attr is not { Args: [var arg] }) { throw new Exception($"the {{:{AttributeName}_now}} attribute requires an argument"); }
-              if (arg is not Microsoft.Dafny.LiteralExpr { Value: BigInteger entryPoint }) { throw new Exception($"{{:{AttributeName}_now}}'s argument needs to be a natural number"); }
-              a.Expr = a.Expr.WrappedWith(ProtectorFunctions.ProtectToProveImmediate with { EntryPoint = entryPoint });
-            } else {
-              a.Expr = a.Expr.AsProtected();
-              //Console.WriteLine($"assert statement: {a.Expr}");
+          foreach (var acc in Microsoft.Dafny.Util.Concat(
+            AttrInContract.Keys.SelectMany(k => ContainingAttr(k, ImmediateAttributeName)), // {:ipm_now} can't be found in an ensures clause that doesn't have {:ipm}
+            MemberDecl switch {
+              Microsoft.Dafny.Function f => ContainingAttr(f.Body!, ImmediateAttributeName),
+              MethodOrConstructor m => ContainingAttr(m.Body!, ImmediateAttributeName),
+              _ => throw new UnreachableException(),
             }
-          }
-          foreach (var arg in mof.Ins.Where(arg => arg.DefaultValue is not null)) {
-            arg.DefaultValue = arg.DefaultValue!.AsProtected();
-          }
-          foreach (var req in mof.Req) {
-            req.E = req.E.AsProtected();
-          }
-          foreach (var ens in mof.Ens) {
-            if (Attributes.Contains(ens.Attributes, AttributeName)) {
-              ens.E = ens.E.WrappedWith(ProtectorFunctions.ProtectToProve);
-            } else {
-              ens.E = ens.E.AsProtected();
-            }
-          }
-          mof.Decreases.Expressions?.ModifyAllInPlace(ProtectedExtension.AsProtected);
-          mof.Reads.Expressions?.ModifyAllInPlace(ReplacedFrameExpression);
-          switch (mof) {
-            case Microsoft.Dafny.Function { Body: not null } f:
-              f.Body.PreResolveRecursiveSubStatements().OfType<AssertStmt>().ForEach(ModifyAssert);
-              break;
-            case Microsoft.Dafny.Function: break;
-            case MethodOrConstructor { Body: not null } m:
-              m.Body.Body.SelectMany(s => s.PreResolveRecursiveSubStatements()).OfType<AssertStmt>().ForEach(ModifyAssert);
-              m.Mod.Expressions?.ModifyAllInPlace(ReplacedFrameExpression);
-              break;
-            case MethodOrConstructor: break;
-            default: throw new UnreachableException();
+          )) {
+            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, ImmediateAttributeName);
           }
         }
         protected override M CreateDuplicateOfMemberDecl() {
@@ -201,7 +163,6 @@ namespace DafnyCore.IncrementalCompilation {
               throw new UnreachableException();
           }
           AlterOriginalMemberDecl();
-          ProtectDuplicate(result);
           return result;
         }
       }
@@ -220,70 +181,70 @@ namespace DafnyCore.IncrementalCompilation {
     }
 
     #endregion
-    private IEnumerable<RefiningModuleGenerator> SplitAndProtect(LiteralModuleDecl lmd) {
+    private IEnumerable<RefiningModuleGenerator> Split(LiteralModuleDecl lmd) {
       Contract.Requires(lmd.ModuleDef.ModuleKind is (ModuleKindEnum.Abstract or ModuleKindEnum.Concrete),
         $"module must be either abstract or concrete, but is {lmd.ModuleDef.ModuleKind}");
       lmd.ModuleDef.ModuleKind = ModuleKindEnum.Abstract;
-      foreach (var e in SplitAndProtect(lmd.ModuleDef.DefaultClass!)) { yield return e; }
+      foreach (var e in Split(lmd.ModuleDef.DefaultClass!)) { yield return e; }
 
       foreach (var prefix_lmd in lmd.ModuleDef.PrefixNamedModules.Select(pnm => pnm.Module)) {
-        foreach (var e in SplitAndProtect(prefix_lmd)) { yield return e; }
+        foreach (var e in Split(prefix_lmd)) { yield return e; }
       }
       foreach (var sd in lmd.ModuleDef.SourceDecls) {
         switch (sd) {
           case LiteralModuleDecl inner_lmd:
-            foreach (var e in SplitAndProtect(inner_lmd)) { yield return e; }
+            foreach (var e in Split(inner_lmd)) { yield return e; }
             break;
           case ModuleExportDecl or AbstractModuleDecl or AliasModuleDecl:
             break; // nothing to be done on imports or exports
           case ModuleDecl: throw new UnreachableException();
           case IteratorDecl id:
-            foreach (var e in SplitAndProtect(id)) { yield return e; }
+            foreach (var e in Split(id)) { yield return e; }
             break;
           case TopLevelDeclWithMembers wm when wm is (ClassDecl or TraitDecl or DatatypeDecl or NewtypeDecl or AbstractTypeDecl):
-            foreach (var e in SplitAndProtect(wm)) { yield return e; }
+            foreach (var e in Split(wm)) { yield return e; }
             break;
           case SubsetTypeDecl tsd:
-            foreach (var e in SplitAndProtect(tsd)) { yield return e; }
+            foreach (var e in Split(tsd)) { yield return e; }
             break;
           case ConcreteTypeSynonymDecl: break; // these are simply bare aliases
           default: throw new UnreachableException();
         }
       }
     }
-    private IEnumerable<RefiningModuleGenerator> SplitAndProtect(IteratorDecl id) {
+    private IEnumerable<RefiningModuleGenerator> Split(IteratorDecl id) {
       if (id.Body is null) { yield break; }
       yield break;
       yield return new RefiningModuleGenerator.FromIteratorDecl(id);
     }
-    private IEnumerable<RefiningModuleGenerator> SplitAndProtect(SubsetTypeDecl std) {
+    private IEnumerable<RefiningModuleGenerator> Split(SubsetTypeDecl std) {
       if (std.Witness is null) { yield break; } // ??? maybe constraint also plays a role here?
       yield break;
       yield return new RefiningModuleGenerator.FromSubSetTypeDecl(std);
     }
-    private IEnumerable<RefiningModuleGenerator> SplitAndProtect<E>(E dcd) where E : TopLevelDeclWithMembers {
+    private IEnumerable<RefiningModuleGenerator> Split<E>(E dcd) where E : TopLevelDeclWithMembers {
       bool canHaveConstructors = dcd is ClassDecl or TraitDecl;
       foreach (var member in dcd.Members) {
         switch (member) {
-          case ConstantField { Rhs: var e and not null, Attributes: var attrs } cf when HasAttr(attrs) || HasAttr(e):
+          case ConstantField { Rhs: var e and not null, Attributes: var attrs } cf when HasAttr(attrs, AttributeName) || ContainingAttr(e, AttributeName).Any():
             yield return new RefiningModuleGenerator.FromConstantField<E>(dcd, cf);
             break;
           case ConstantField: break;
           case Field: break;
           case MethodOrFunction m_or_f:
             //var contractWithAttr = Microsoft.Dafny.Util.Concat(m_or_f.Req.Where(HasAttr), m_or_f.Ens.Where(HasAttr)).ToImmutableHashSet();
-            var contractWithAttr = m_or_f.Ens.Where(HasAttr).ToImmutableHashSet();
+            var attrInContract = m_or_f.Ens.ToImmutableDictionary(e => e, e => ContainingAttr(e, AttributeName).ToImmutableHashSet() as IReadOnlySet<AttributesAccessor>);
             switch (m_or_f) {
               case Microsoft.Dafny.Function { Body: not null } f
-                  when AssertsContainingAttr(f.Body).ToImmutableHashSet() is var assertsWithAttr && (!contractWithAttr.IsEmpty || !assertsWithAttr.IsEmpty):
-                yield return new RefiningModuleGenerator.FromMethodOrFunction<E, Microsoft.Dafny.Function>(dcd, f, contractWithAttr, assertsWithAttr);
+                  when ContainingAttr(f.Body, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
+                yield return new RefiningModuleGenerator.FromMethodOrFunction<E, Microsoft.Dafny.Function>(dcd, f, attrInContract, assertsWithAttr);
                 break;
               case Microsoft.Dafny.Function: break;
               case MethodOrConstructor { Body: not null } m_or_c when
-                  m_or_c.Body.Body.SelectMany(AssertsContainingAttr).ToImmutableHashSet() is var assertsWithAttr && (!contractWithAttr.IsEmpty || !assertsWithAttr.IsEmpty):
+                  ContainingAttr(m_or_c.Body, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
                 yield return m_or_c switch {
-                  Method m => new RefiningModuleGenerator.FromMethodOrFunction<E, Method>(dcd, m, contractWithAttr, assertsWithAttr),
-                  Constructor c => new RefiningModuleGenerator.FromMethodOrFunction<E, Constructor>(dcd, c, contractWithAttr, assertsWithAttr),
+                  Method m => new RefiningModuleGenerator.FromMethodOrFunction<E, Method>(dcd, m, attrInContract, assertsWithAttr),
+                  Constructor c => new RefiningModuleGenerator.FromMethodOrFunction<E, Constructor>(dcd, c, attrInContract, assertsWithAttr),
                   _ => throw new UnreachableException(),
                 };
                 break;
@@ -296,11 +257,26 @@ namespace DafnyCore.IncrementalCompilation {
         }
       }
     }
-    public static bool HasAttr(Attributes? attrs) => Attributes.Contains(attrs, AttributeName);
-    public static IEnumerable<AssertStmt> AssertsContainingAttr(Expression e) => e.PreResolveRecursiveSubStatements().OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes));
-    public static bool HasAttr(Expression e) => AssertsContainingAttr(e).Any();
-    public static IEnumerable<AssertStmt> AssertsContainingAttr(Statement s) => s.PreResolveRecursiveSubStatements().OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes));
-    public static bool HasAttr(Statement s) => AssertsContainingAttr(s).Any();
-    public static bool HasAttr(AttributedExpression ae) => HasAttr(ae.Attributes) || HasAttr(ae.E);
+    public static bool HasAttr(Attributes? attrs, string attr) => Attributes.Contains(attrs, attr);
+    public static IEnumerable<AttributesAccessor> ContainingAttr(AttributedExpression ae, string attr) {
+      if (HasAttr(ae.Attributes, attr)) { yield return new AttributesAccessor(ae); }
+      foreach (var aa in ContainingAttr(ae.E, attr)) { yield return aa; }
+    }
+    public static IEnumerable<AttributesAccessor> ContainingAttr(Expression e, string attr) => e.PreResolveRecursiveSubStatements().OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes, attr)).Select(s => new AttributesAccessor(s));
+
+    public static IEnumerable<AttributesAccessor> ContainingAttr(Statement s, string attr) => s.PreResolveRecursiveSubStatements().OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes, attr)).Select(s => new AttributesAccessor(s));
+    public class AttributesAccessor {
+      private Func<Attributes?> get { get; }
+      private Action<Attributes?> set { get; }
+      public AttributesAccessor(Statement s) {
+        get = () => s.Attributes;
+        set = (value) => s.Attributes = value;
+      }
+      public AttributesAccessor(AttributedExpression e) {
+        get = () => e.Attributes;
+        set = (value) => e.Attributes = value;
+      }
+      public Attributes? Attributes { get => get(); set => set(value); }
+    }
   }
 }
