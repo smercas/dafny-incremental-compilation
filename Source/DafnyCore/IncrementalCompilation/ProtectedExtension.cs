@@ -7,9 +7,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Numerics;
-using System.Text;
-using System.Threading.Tasks;
 using static DafnyCore.IncrementalCompilation.ProtectorFunctions;
+using static Microsoft.Dafny.CalcStmt;
 
 namespace DafnyCore.IncrementalCompilation {
   internal static class ProtectedExtension { // FOR THE LOVE OF GOD LET'S KEEP THIS BEFORE THE RESOLUTION
@@ -28,7 +27,7 @@ namespace DafnyCore.IncrementalCompilation {
       //Console.WriteLine($"assert statement: {a.Expr}");
       return null;
     }
-    private static UnreachableException CanOnlyAppearDuringResolution<T>(T o) where T : notnull => new($"{o.GetType().Name} can only appear during resolution");
+    private static UnreachableException CannotAppearBeforeResolution<T>(this T o) where T : notnull => new($"{o} (of type `{typeof(T).Name}`) can't appear before resolution");
     private static Cloner cloner { get; } = new();
     private static IOrigin Clone(this IOrigin o) => cloner.Origin(o);
     [return: NotNullIfNotNull(nameof(a))] private static Attributes? Clone(this Attributes? a) => cloner.CloneAttributes(a);
@@ -36,9 +35,10 @@ namespace DafnyCore.IncrementalCompilation {
     [return: NotNullIfNotNull(nameof(tp))] private static TypeParameter? Clone(this TypeParameter? tp) => cloner.CloneTypeParam(tp);
     [return: NotNullIfNotNull(nameof(t))] private static AttributedToken? Clone(this AttributedToken? t) => cloner.AttributedTok(t);
     [return: NotNullIfNotNull(nameof(e))] private static E? Clone<E>(this E? e) where E : Expression => cloner.CloneExpr(e) as E;
+    private static List<Label> Clone(this List<Label> labels) => labels.ConvertAllWhere(static label => (label.Name is not null, label.Clone()));
     private static Label Clone(this Label l) => l switch {
       AssertLabel al => al.Clone(),
-      _ when l.GetType() == typeof(Label) => new(l.Tok.Clone(), l.Name),
+      _ when l.IsExactly() => new Label(l.Tok.Clone(), l.Name),
       _ => throw new UnreachableException(),
     };
     #region Label
@@ -54,7 +54,7 @@ namespace DafnyCore.IncrementalCompilation {
           _ => bv.AsProtected(),
         },
         Formal f => f switch {
-          ImplicitFormal i => throw CanOnlyAppearDuringResolution(i),
+          ImplicitFormal i => throw i.CannotAppearBeforeResolution(),
           _ => f.AsProtected(),
         },
         _ => throw new UnreachableException(),
@@ -103,19 +103,30 @@ namespace DafnyCore.IncrementalCompilation {
     public static AllocateClass AsProtected(this AllocateClass rhs) => new(rhs.Origin.Clone(), rhs.Path.Clone(), rhs.Bindings?.AsProtected(), rhs.Attributes.Clone());
     #endregion
 
-
-    public static AttributedExpression AsProtected(this AttributedExpression e) => new(e.E.AsProtected(), e.Label?.Clone(), e.Attributes.Clone());
-    public static AttributedExpression AsProtectedEns(this AttributedExpression e) => new(Attributes.Contains(e.Attributes, ModuleSplitter.AttributeName) ? e.E.WrappedWith(ProtectToProve) : e.E.AsProtected(), e.Label?.Clone(), e.Attributes.Clone());
+    public enum AEKind { Ensures };
+    public static AttributedExpression AsProtected(this AttributedExpression e, AEKind? kind = null) => new(kind switch {
+      null => e.E.AsProtected(),
+      AEKind.Ensures => Attributes.Contains(e.Attributes, ModuleSplitter.AttributeName) ? e.E.WrappedWith(ProtectToProve) : e.E.AsProtected(),
+      _ => throw new UnreachableException(),
+    }, e.Label?.Clone(), e.Attributes.Clone());
 
     public static Specification<FrameExpression> AsProtected(this Specification<FrameExpression> spec) => new(spec.Expressions?.ConvertAll(AsProtected), spec.Attributes.Clone());
     public static Specification<Expression> AsProtected(this Specification<Expression> spec) => new(spec.Expressions?.ConvertAll(AsProtected), spec.Attributes.Clone());
+
     public static FrameExpression AsProtected(this FrameExpression e) => new(e.Origin.Clone(), e.OriginalExpression.AsProtected(), e.FieldName);
+
+    public static CalcOp AsProtected(this CalcOp o) => o switch {
+      BinaryCalcOp b => new BinaryCalcOp(b.Op),
+      TernaryCalcOp t => new TernaryCalcOp(t.Index.AsProtected()),
+      _ => throw new NotSupportedException(),
+    };
+
+    public static GuardedAlternative AsProtected(this GuardedAlternative a) => new(a.Origin.Clone(), a.IsBindingGuard, a.Guard.AsProtected(), a.Body.ConvertAll(AsProtected), a.Attributes.Clone());
 
     #endregion
 
     #region Statement
     public static Statement AsProtected(this Statement s) => s switch {
-      #region done
       NestedMatchStmt p => p.AsProtected(),
       ConcreteAssignStatement p => p.AsProtected(),
       SingleAssignStmt p => p.AsProtected(),
@@ -123,7 +134,7 @@ namespace DafnyCore.IncrementalCompilation {
       VarDeclStmt p => p.AsProtected(),
       BreakOrContinueStmt p => p.AsProtected(),
       ForallStmt p => p.AsProtected(),
-      CallStmt p => throw CanOnlyAppearDuringResolution(p),
+      CallStmt p => throw p.CannotAppearBeforeResolution(),
       PrintStmt p => p.AsProtected(),
       ProduceStmt p => p switch {
         ReturnStmt pp => pp.AsProtected(),
@@ -134,16 +145,14 @@ namespace DafnyCore.IncrementalCompilation {
       HideRevealStmt p => p.AsProtected(),
       ModifyStmt p => p.AsProtected(),
       PredicateStmt p => p switch {
-        #endregion
         AssertStmt pp => pp.AsProtected(),
         AssumeStmt pp => pp.AsProtected(),
         ExpectStmt pp => pp.AsProtected(),
         _ => throw new UnreachableException(),
       },
-      #region todo
       BlockByProofStmt p => p.AsProtected(),
       CalcStmt p => p.AsProtected(),
-      MatchStmt p => p.AsProtected(),
+      MatchStmt p => throw p.CannotAppearBeforeResolution(),
       SkeletonStatement p => p.AsProtected(),
       LabeledStatement p => p switch {
         AlternativeStmt pp => pp.AsProtected(),
@@ -152,7 +161,8 @@ namespace DafnyCore.IncrementalCompilation {
           OneBodyLoopStmt ppp => ppp switch {
             ForLoopStmt pppp => pppp.AsProtected(),
             WhileStmt pppp => pppp switch {
-              RefinedWhileStmt ppppp => ppppp.AsProtected(),
+              RefinedWhileStmt ppppp => throw ppppp.CannotAppearBeforeResolution(),
+              _ when pppp.IsExactly() => pppp.AsProtected(),
               _ => throw new UnreachableException(),
             },
             _ => throw new UnreachableException(),
@@ -161,14 +171,12 @@ namespace DafnyCore.IncrementalCompilation {
         },
         IfStmt pp => pp.AsProtected(),
         BlockLikeStmt pp => pp.AsProtected(),
+        _ when p.IsExactly() => p.AsProtected(),
         _ => throw new UnreachableException(),
       },
-      #endregion
       _ => throw new UnreachableException(),
     };
-    public static NestedMatchStmt AsProtected(this NestedMatchStmt s) => new(
-      s.Origin.Clone(), s.Source.AsProtected(), s.Cases.ConvertAll(c => new NestedMatchCaseStmt(c.Origin.Clone(), c.Pat.AsProtected(), c.Body.ConvertAll(AsProtected), c.Attributes.Clone())), s.UsesOptionalBraces, s.Attributes.Clone()
-    );
+    public static NestedMatchStmt AsProtected(this NestedMatchStmt s) => new(s.Origin.Clone(), s.Source.AsProtected(), s.Cases.ConvertAll(static c => new NestedMatchCaseStmt(c.Origin.Clone(), c.Pat.AsProtected(), c.Body.ConvertAll(AsProtected), c.Attributes.Clone())), s.UsesOptionalBraces, s.Attributes.Clone());
     public static ConcreteAssignStatement AsProtected(this ConcreteAssignStatement s) => s switch {
       AssignOrReturnStmt a => a.AsProtected(),
       AssignStatement a => a.AsProtected(),
@@ -185,54 +193,88 @@ namespace DafnyCore.IncrementalCompilation {
     public static VarDeclPattern AsProtected(this VarDeclPattern s) => new(s.Origin.Clone(), s.LHS.AsProtected(), s.RHS.AsProtected(), s.HasGhostModifier);
     public static VarDeclStmt AsProtected(this VarDeclStmt s) => new(s.Origin.Clone(), s.Locals.ConvertAll(AsProtected), s.Assign?.ApplyIfNotNull(AsProtected), s.Attributes?.Clone());
     public static BreakOrContinueStmt AsProtected(this BreakOrContinueStmt s) => new(s.Origin.Clone(), s.TargetLabel?.Clone(), s.BreakAndContinueCount, s.IsContinue, s.Attributes.Clone());
-    public static ForallStmt AsProtected(this ForallStmt s) => new(s.Origin.Clone(), s.BoundVars.ConvertAll(AsProtected), s.Attributes.Clone(), s.Range.AsProtected(), s.Ens.ConvertAll(AsProtected), s.Body.AsProtected());
+    public static ForallStmt AsProtected(this ForallStmt s) => new(s.Origin.Clone(), s.BoundVars.ConvertAll(AsProtected), s.Attributes.Clone(), s.Range.AsProtected(), s.Ens.ConvertAll(static e => e.AsProtected()), s.Body.AsProtected());
     public static PrintStmt AsProtected(this PrintStmt s) => new(s.Origin.Clone(), s.Args.ConvertAll(AsProtected), s.Attributes.Clone());
+    #region ProduceStmt
     public static ReturnStmt AsProtected(this ReturnStmt s) => new(s.Origin.Clone(), s.Rhss?.ConvertAll(AsProtected), s.Attributes.Clone()) { ReverifyPost = s.ReverifyPost }; // ReverifyPost is done in the cloner but not necessary, since it can only be assigned after the protections are done
     public static YieldStmt AsProtected(this YieldStmt s) => new(s.Origin.Clone(), s.Rhss?.ConvertAll(AsProtected));
+    #endregion
     public static TryRecoverStatement AsProtected(this TryRecoverStatement s) {
       Console.WriteLine("TryRecoverStatement shouldn't be present in the AST");
       return new(s.TryBody.AsProtected(), s.HaltMessageVar.AsProtected(), s.RecoverBody.AsProtected());
     }
     public static HideRevealStmt AsProtected(this HideRevealStmt s) => new(s.Origin.Clone(), s.Exprs?.ConvertAll(AsProtected), s.Mode, s.Attributes.Clone());
     public static ModifyStmt AsProtected(this ModifyStmt s) => new(s.Origin.Clone(), s.Mod.Expressions?.ConvertAll(AsProtected), s.Mod.Attributes.Clone(), s.Body.AsProtected());
+    #region PredicateStmt
     public static AssertStmt AsProtected(this AssertStmt s) => new(s.Origin.Clone(), CustomAssertExprProtection(s) ?? s.Expr.AsProtected(), s.Label?.Clone(), s.Attributes.Clone());
     public static AssumeStmt AsProtected(this AssumeStmt s) => new(s.Origin.Clone(), s.Expr.AsProtected(), s.Attributes.Clone());
     public static ExpectStmt AsProtected(this ExpectStmt s) => new(s.Origin.Clone(), s.Expr.AsProtected(), s.Message.Clone(), s.Attributes.Clone());
-    // after many other things
+    #endregion
+    public static BlockByProofStmt AsProtected(this BlockByProofStmt s) => new(s.Origin.Clone(), s.Proof.AsProtected(), s.Body.AsProtected(), s.Attributes.Clone());
+    public static CalcStmt AsProtected(this CalcStmt s) {
+      List<Expression> lines;
+      switch (s.Lines.Count) {
+        case < 2:
+        case >= 2 when s.Lines[^2] != s.Lines[^1]: {
+            lines = s.Lines.ConvertAll(AsProtected);
+          }
+          break;
+        case >= 2: {
+            lines = new(s.Lines.Count);
+            lines.AddRange(s.Lines.SkipLast(1).Select(AsProtected).WithTheLastElementRepeated());
+          }
+          break;
+      }
+      return new(s.Origin.Clone(), s.UserSuppliedOp.AsProtected(), lines, s.Hints.ConvertAll(AsProtected), s.StepOps.ConvertAll(AsProtected), s.Attributes.Clone());
+    }
+    public static SkeletonStatement AsProtected(this SkeletonStatement s) => (s.S, s.ConditionEllipsis, s.BodyEllipsis) switch { // not sure what the object invariant, so I assumed based on usade throughout the codebase
+      (null, null, null) => new(s.Origin.Clone()),
+      (not null, not null, not null) => new(s.S.AsProtected(), s.ConditionEllipsis.Clone(), s.BodyEllipsis.Clone()),
+      _ => throw new UnreachableException(),
+    };
+    public static LabeledStatement AsProtected(this LabeledStatement s) => new(s.Origin.Clone(), s.Labels.Clone(), s.Attributes.Clone());
+    public static AlternativeStmt AsProtected(this AlternativeStmt s) => new(s.Origin.Clone(), s.Labels.Clone(), s.Alternatives.ConvertAll(AsProtected), s.UsesOptionalBraces, s.Attributes.Clone());
+    public static AlternativeLoopStmt AsProtected(this AlternativeLoopStmt s) => new(s.Origin.Clone(), s.Invariants.ConvertAll(static i => i.AsProtected()), s.Decreases.AsProtected(), s.Mod.AsProtected(), s.Alternatives.ConvertAll(AsProtected), s.UsesOptionalBraces, s.Labels.Clone(), s.Attributes.Clone());
+    public static ForLoopStmt AsProtected(this ForLoopStmt s) => new(s.Origin.Clone(), s.LoopIndex.AsProtected(), s.Start.AsProtected(), s.End?.AsProtected(), s.GoingUp, s.Invariants.ConvertAll(static i => i.AsProtected()), s.Decreases.AsProtected(), s.Mod.AsProtected(), s.Body?.AsProtected(), s.Labels.Clone(), s.Attributes.Clone());
+    public static WhileStmt AsProtected(this WhileStmt s) => new(s.Origin.Clone(), s.Guard?.AsProtected()!, s.Invariants.ConvertAll(static i => i.AsProtected()), s.Decreases.AsProtected(), s.Mod.AsProtected(), s.Body?.AsProtected()!);
+    public static IfStmt AsProtected(this IfStmt s) => new(s.Origin.Clone(), s.IsBindingGuard, s.Guard?.AsProtected(), s.Thn.AsProtected(), s.Els?.AsProtected());
     public static BlockLikeStmt AsProtected(this BlockLikeStmt s) => s switch {
       DividedBlockStmt db => db.AsProtected(),
       BlockStmt b => b switch {
         OpaqueBlock ob => ob.AsProtected(),
-        _ when b.GetType() == typeof(BlockStmt) => b.AsProtected(),
+        _ when b.IsExactly() => b.AsProtected(),
         _ => throw new UnreachableException(),
       },
       _ => throw new UnreachableException(),
     };
-    public static DividedBlockStmt AsProtected(this DividedBlockStmt s) => new(s.Origin.Clone(), s.BodyInit.ConvertAll(AsProtected), s.SeparatorTok?.Clone(), s.BodyProper.ConvertAll(AsProtected), s.Labels.ConvertAllWhere(l => (l.Name is not null, new Label(l.Tok.Clone(), l.Name))), s.Attributes.Clone());
-    public static BlockStmt AsProtected(this BlockStmt s) => new(s.Origin.Clone(), s.Body.ConvertAll(AsProtected), s.Labels.ConvertAllWhere(l => (l.Name is not null, new Label(l.Tok.Clone(), l.Name))), s.Attributes.Clone());
-    public static OpaqueBlock AsProtected(this OpaqueBlock s) => null!;
-
+    #region BlockLikeStmt
+    public static DividedBlockStmt AsProtected(this DividedBlockStmt s) => new(s.Origin.Clone(), s.BodyInit.ConvertAll(AsProtected), s.SeparatorTok?.Clone(), s.BodyProper.ConvertAll(AsProtected), s.Labels.Clone(), s.Attributes.Clone());
+    public static BlockStmt AsProtected(this BlockStmt s) => new(s.Origin.Clone(), s.Body.ConvertAll(AsProtected), s.Labels.Clone(), s.Attributes.Clone());
+    public static OpaqueBlock AsProtected(this OpaqueBlock s) => new(s.Origin.Clone(), s.Body.ConvertAll(AsProtected), s.Ensures.ConvertAll(static e => e.AsProtected()), s.Modifies.AsProtected(), s.Labels.Clone(), s.Attributes.Clone());
+    #endregion
     #endregion
 
     #region Expression
     public static Expression AsProtected(this Expression e) => e switch {
-      ApplyExpr p => p.AsProtected(),
-      FunctionCallExpr p => p.AsProtected(),
-      MemberSelectExpr p => p.AsProtected(),
+      ApplyExpr p => throw p.CannotAppearBeforeResolution(),
+      FunctionCallExpr p => throw p.CannotAppearBeforeResolution(),
+      MemberSelectExpr p => throw p.CannotAppearBeforeResolution(),
       MultiSelectExpr p => p.AsProtected(),
       SeqSelectExpr p => p.AsProtected(),
       ThisExpr p => p switch {
         ImplicitThisExpr pp => pp switch {
-          ImplicitThisExprConstructorCall ppp => ppp.AsProtected(),
-          _ => pp.AsProtected(),
+          ImplicitThisExprConstructorCall ppp => throw ppp.CannotAppearBeforeResolution(),
+          _ when pp.IsExactly() => pp.AsProtected(),
+          _ => throw new UnreachableException(),
         },
-        _ => p.AsProtected(),
+        _ when p.IsExactly() => p.AsProtected(),
+        _ => throw new UnreachableException(),
       },
       DisplayExpression p => p switch {
         SeqDisplayExpr pp => pp.AsProtected(),
         SetDisplayExpr pp => pp.AsProtected(),
         MultiSetDisplayExpr pp => pp.AsProtected(),
-        _ => p.AsProtected(),
+        _ => throw new UnreachableException(),
       },
       MapDisplayExpr p => p.AsProtected(),
       MultiSetFormingExpr p => p.AsProtected(),
@@ -241,20 +283,20 @@ namespace DafnyCore.IncrementalCompilation {
       ComprehensionExpr p => p switch {
         LambdaExpr pp => pp.AsProtected(),
         MapComprehension pp => pp.AsProtected(),
+        SetComprehension pp => pp.AsProtected(),
         QuantifierExpr pp => pp switch {
           ForallExpr ppp => ppp.AsProtected(),
           ExistsExpr ppp => ppp.AsProtected(),
-          _ => pp.AsProtected(),
+          _ => throw new UnreachableException(),
         },
-        SetComprehension pp => pp.AsProtected(),
-        _ => p.AsProtected(),
+        _ => throw new UnreachableException(),
       },
       ITEExpr p => p.AsProtected(),
       NestedMatchExpr p => p.AsProtected(),
       TernaryExpr p => p.AsProtected(),
       DatatypeValue p => p.AsProtected(),
-      FieldLocation p => p.AsProtected(),
-      IndexFieldLocation p => p.AsProtected(),
+      FieldLocation p => throw p.CannotAppearBeforeResolution(),
+      IndexFieldLocation p => throw p.CannotAppearBeforeResolution(),
       LocalsObjectExpression p => p.AsProtected(),
       OldExpr p => p.AsProtected(),
       UnchangedExpr p => p.AsProtected(),
@@ -264,139 +306,126 @@ namespace DafnyCore.IncrementalCompilation {
       UnaryExpr p => p switch {
         UnaryOpExpr pp => pp switch {
           FreshExpr ppp => ppp.AsProtected(),
-          _ => pp.AsProtected(),
+          _ when pp.IsExactly() => pp.AsProtected(),
+          _ => throw new UnreachableException(),
         },
         TypeUnaryExpr pp => pp switch {
           ConversionExpr ppp => ppp.AsProtected(),
           TypeTestExpr ppp => ppp.AsProtected(),
-          _ => pp.AsProtected(),
+          _ => throw new UnreachableException(),
         },
-        _ => p.AsProtected(),
+        _ => throw new UnreachableException(),
       },
-      BoxingCastExpr p => p.AsProtected(),
-      UnboxingCastExpr p => p.AsProtected(),
+      BoxingCastExpr p => throw p.CannotAppearBeforeResolution(),
+      UnboxingCastExpr p => throw p.CannotAppearBeforeResolution(),
       IdentifierExpr p => p switch {
         AutoGhostIdentifierExpr pp => pp.AsProtected(),
         ImplicitIdentifierExpr pp => pp.AsProtected(),
-        _ => p.AsProtected(),
+        _ when p.IsExactly() => p.AsProtected(),
+        _ => throw new UnreachableException(),
       },
       LetExpr p => p switch {
-        BoogieGenerator.SubstLetExpr pp => pp.AsProtected(),
-        _ => p.AsProtected(),
+        BoogieGenerator.SubstLetExpr pp => throw pp.CannotAppearBeforeResolution(),
+        _ when p.IsExactly() => p.AsProtected(),
+        _ => throw new UnreachableException(),
       },
-      ResolverIdentifierExpr p => p.AsProtected(),
+      ResolverIdentifierExpr p => throw p.CannotAppearBeforeResolution(),
       ConcreteSyntaxExpression p => p switch {
         NameSegment pp => pp.AsProtected(),
         SuffixExpr pp => pp switch {
           ApplySuffix ppp => ppp switch {
-            ProtectToProveApplySuffix pppp => pppp.AsProtected(),
-            _ => ppp.AsProtected(),
+            ProtectToProveApplySuffix pppp => throw new UnreachableException($"Due to the nature of the protection applied over the AST, no part of the AST should be processed more than once; this expression signals that a part of the AST {pppp} is to be processed at least twice"),
+            _ when ppp.IsExactly() => ppp.AsProtected(),
+            _ => throw new UnreachableException(),
           },
           ExprDotName ppp => ppp.AsProtected(),
           FieldLocationExpression ppp => ppp.AsProtected(),
           IndexFieldLocationExpression ppp => ppp.AsProtected(),
-          _ => pp.AsProtected(),
+          _ => throw new UnreachableException(),
         },
         DatatypeUpdateExpr pp => pp.AsProtected(),
         ChainingExpression pp => pp.AsProtected(),
         ParensExpression pp => pp switch {
-          AutoGeneratedExpression ppp => ppp.AsProtected(),
-          _ => pp.AsProtected(),
+          AutoGeneratedExpression ppp => throw ppp.CannotAppearBeforeResolution(),
+          _ when pp.IsExactly() => pp.AsProtected(),
+          _ => throw new UnreachableException(),
         },
         LetOrFailExpr pp => pp.AsProtected(),
-        DefaultValueExpression pp => pp switch { // geniunely unreachable???
-          DefaultValueExpressionType ppp => ppp.AsProtected(),
-          DefaultValueExpressionPreType ppp => ppp.AsProtected(),
-          _ => pp.AsProtected(),
+        DefaultValueExpression pp => pp switch {
+          DefaultValueExpressionType ppp => throw ppp.CannotAppearBeforeResolution(),
+          DefaultValueExpressionPreType ppp => throw ppp.CannotAppearBeforeResolution(),
+          _ => throw new UnreachableException(),
         },
         NegationExpression pp => pp.AsProtected(),
-        _ => p.AsProtected(),
+        _ => throw new UnreachableException(),
       },
       LiteralExpr p => p switch {
-        StaticReceiverExpr pp => pp.AsProtected(),
+        StaticReceiverExpr pp => throw pp.CannotAppearBeforeResolution(),
         CharLiteralExpr pp => pp.AsProtected(),
         StringLiteralExpr pp => pp.AsProtected(),
-        _ => p.AsProtected(),
+        _ when p.IsExactly() => p.AsProtected(),
+        _ => throw new UnreachableException(),
       },
       StmtExpr p => p.AsProtected(),
-      MatchExpr p => p.AsProtected(),
-      BoogieGenerator.BoogieWrapper p => p.AsProtected(),
-      BoogieGenerator.BoogieFunctionCall p => p.AsProtected(),
+      MatchExpr p => throw p.CannotAppearBeforeResolution(),
+      BoogieGenerator.BoogieWrapper p => throw p.CannotAppearBeforeResolution(),
+      BoogieGenerator.BoogieFunctionCall p => throw p.CannotAppearBeforeResolution(),
       _ => throw new UnreachableException(),
     };
-    private static T NotImplemented<T>(T e) where T : notnull {
-      Console.WriteLine($"Dafny IPM: {e.GetType().Name} not yet implemented.");
-      return e;
-    }
-    public static StaticReceiverExpr AsProtected(this StaticReceiverExpr e) => e.Clone();
-    public static LiteralExpr AsProtected(this LiteralExpr e) => e.Clone();
-    public static ProtectToProveApplySuffix AsProtected(this ProtectToProveApplySuffix e) => e; // no need to make a clone, since they're another kind of protection that also clones its original
+    public static MultiSelectExpr AsProtected(this MultiSelectExpr e) => new(e.Origin.Clone(), e.Array.AsProtected(), e.Indices.ConvertAll(AsProtected));
+    public static SeqSelectExpr AsProtected(this SeqSelectExpr e) => new(e.Origin.Clone(), e.SelectOne, e.Seq.AsProtected(), e.E0?.AsProtected(), e.E1?.AsProtected(), e.CloseParen);
     public static ApplySuffix AsProtected(this ThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
-    public static ApplySuffix AsProtected(this IdentifierExpr e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
-    public static ApplySuffix AsProtected(this DatatypeValue e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
-    public static ApplySuffix AsProtected(this NameSegment e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
-    public static UnaryOpExpr AsProtected(this UnaryOpExpr e) {
-      // `UnaryOpExpr.Opcode.Lit` used in translation, this method is called before translation
-      Contract.Assert(e.Op is not UnaryOpExpr.Opcode.Lit);
-      Contract.Assert(e.Op is UnaryOpExpr.Opcode.Not or
-        UnaryOpExpr.Opcode.Cardinality or
-        UnaryOpExpr.Opcode.Allocated or
-        UnaryOpExpr.Opcode.Assigned || e is FreshExpr { Op: UnaryOpExpr.Opcode.Fresh });
-      return new(e.Origin.Clone(), e.Op, e.E.AsProtected());
-    }
-    public static SeqSelectExpr AsProtected(this SeqSelectExpr e) => new(
-      e.Origin.Clone(), e.SelectOne, e.Seq.AsProtected(), e.E0.ApplyIfNotNull(AsProtected), e.E1.ApplyIfNotNull(AsProtected), e.CloseParen
-    );
+    public static ApplySuffix AsProtected(this ImplicitThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.Protect); // TODO: check what this is
     public static SeqDisplayExpr AsProtected(this SeqDisplayExpr e) => new(e.Origin.Clone(), e.Elements.ConvertAll(AsProtected));
     public static SetDisplayExpr AsProtected(this SetDisplayExpr e) => new(e.Origin.Clone(), e.Finite, e.Elements.ConvertAll(AsProtected));
     public static MultiSetDisplayExpr AsProtected(this MultiSetDisplayExpr e) => new(e.Origin.Clone(), e.Elements.ConvertAll(AsProtected));
-    public static MapDisplayExpr AsProtected(this MapDisplayExpr e) => new(
-      e.Origin.Clone(), e.Finite, e.Elements.ConvertAll(entry => new MapDisplayEntry(entry.A.AsProtected(), entry.B.AsProtected()))
-    );
-    public static SeqConstructionExpr AsProtected(this SeqConstructionExpr e) => new(
-      e.Origin.Clone(), e.ExplicitElementType.ApplyIfNotNull(cloner.CloneType), e.N.AsProtected(), e.Initializer.AsProtected()
-    );
+    public static MapDisplayExpr AsProtected(this MapDisplayExpr e) => new(e.Origin.Clone(), e.Finite, e.Elements.ConvertAll(static entry => new MapDisplayEntry(entry.A.AsProtected(), entry.B.AsProtected())));
+    public static MultiSetFormingExpr AsProtected(this MultiSetFormingExpr e) => new(e.Origin.Clone(), e.E.Clone()); // TODO: check what this is
+    public static SeqConstructionExpr AsProtected(this SeqConstructionExpr e) => new(e.Origin.Clone(), e.ExplicitElementType.Clone(), e.N.AsProtected(), e.Initializer.AsProtected());
     public static SeqUpdateExpr AsProtected(this SeqUpdateExpr e) => new(e.Origin.Clone(), e.Seq.AsProtected(), e.Index.AsProtected(), e.Value.AsProtected());
+    public static LambdaExpr AsProtected(this LambdaExpr e) => new(e.Origin.Clone(), e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected(), e.Reads.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
+    public static MapComprehension AsProtected(this MapComprehension e) => new(e.Origin.Clone(), e.Finite, e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected()!, e.TermLeft?.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
+    public static SetComprehension AsProtected(this SetComprehension e) => new(e.Origin.Clone(), e.Finite, e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected()!, e.Term.AsProtected(), e.Attributes.Clone()) { TermIsImplicit = e.TermIsImplicit };
+    public static ForallExpr AsProtected(this ForallExpr e) => new(e.Origin.Clone(), e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
+    public static ExistsExpr AsProtected(this ExistsExpr e) => new(e.Origin.Clone(), e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
+    public static ITEExpr AsProtected(this ITEExpr e) => new(e.Origin.Clone(), e.IsBindingGuard, e.Test.AsProtected(), e.Thn.AsProtected(), e.Els.AsProtected());
+    public static NestedMatchExpr AsProtected(this NestedMatchExpr e) => new(e.Origin.Clone(), e.Source.AsProtected(), e.Cases.ConvertAll(static c => new NestedMatchCaseExpr(c.Origin.Clone(), c.Pat.AsProtected(), c.Body.AsProtected(), c.Attributes.Clone())), e.UsesOptionalBraces, e.Attributes.Clone());
+    public static TernaryExpr AsProtected(this TernaryExpr e) => new(e.Origin.Clone(), e.Op, e.E0.AsProtected(), e.E1.AsProtected(), e.E2.AsProtected());
+    public static ApplySuffix AsProtected(this DatatypeValue e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
+    public static LocalsObjectExpression AsProtected(this LocalsObjectExpression e) => new(e.Origin.Clone());
+    public static OldExpr AsProtected(this OldExpr e) => new(e.Origin.Clone(), e.Expr.AsProtected(), e.At);
+    public static UnchangedExpr AsProtected(this UnchangedExpr e) => new(e.Origin.Clone(), e.Frame.ConvertAll(AsProtected), e.At);
+    public static WildcardExpr AsProtected(this WildcardExpr e) => new(e.Origin.Clone());
     public static BinaryExpr AsProtected(this BinaryExpr e) => new(e.Origin.Clone(), e.Op, e.E0.AsProtected(), e.E1.AsProtected());
-    public static ChainingExpression AsProtected(this ChainingExpression e) {
-      if (e.PrefixLimits.Any(l => l is not null)) { // why?
-        return NotImplemented(e);
-      }
-      return new(e.Origin.Clone(), e.Operands.ConvertAll(AsProtected), [.. e.Operators], e.OperatorLocs.ConvertAll(Clone), [.. e.PrefixLimits]);
+    public static DecreasesToExpr AsProtected(this DecreasesToExpr e) => new(e.Origin.Clone(), e.OldExpressions.ConvertAll(AsProtected), e.NewExpressions.ConvertAll(AsProtected), e.AllowNoChange);
+    public static UnaryOpExpr AsProtected(this UnaryOpExpr e) {
+      Contract.Requires(e.Op is UnaryOpExpr.Opcode.Not or UnaryOpExpr.Opcode.Allocated or UnaryOpExpr.Opcode.Cardinality or UnaryOpExpr.Opcode.Assigned);
+      return new(e.Origin.Clone(), e.Op, e.E.AsProtected());
     }
+    public static FreshExpr AsProtected(this FreshExpr e) {
+      Contract.Requires(e.Op is UnaryOpExpr.Opcode.Fresh);
+      return new(e.Origin.Clone(), e.E.AsProtected(), e.At);
+    }
+    public static ConversionExpr AsProtected(this ConversionExpr e) => new(e.Origin.Clone(), e.E.AsProtected(), e.ToType.Clone());//, e.messagePrefix);
+    public static TypeTestExpr AsProtected(this TypeTestExpr e) => new(e.Origin.Clone(), e.E.AsProtected(), e.ToType.Clone());
+    public static ApplySuffix AsProtected(this IdentifierExpr e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
+    public static LetExpr AsProtected(this LetExpr e) => new(e.Origin.Clone(), e.LHSs.ConvertAll(AsProtected), e.RHSs.ConvertAll(AsProtected), e.Body.AsProtected(), e.Exact, e.Attributes.Clone());
+    public static ApplySuffix AsProtected(this NameSegment e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
+    // not sure if anything needs to be done for backtick tokens, you'll find out I guess
+    public static ApplySuffix AsProtected(this ApplySuffix e) => new(e.Origin.Clone(), e.AtTok?.Clone(), e.Lhs.Clone(), e.Bindings.ArgumentBindings.ConvertAll(static ab => new ActualBinding(ab.FormalParameterName?.Clone(), ab.Actual.AsProtected(), ab.IsGhost)), e.CloseParen);
+    public static ExprDotName AsProtected(this ExprDotName e) => new(e.Origin.Clone(), e.Lhs.AsProtected(), e.SuffixNameNode.Clone(), e.OptTypeArguments?.ConvertAll<Microsoft.Dafny.Type>(Clone));
+    public static FieldLocationExpression AsProtected(this FieldLocationExpression e) => new(e.Lhs.AsProtected(), e.Backtick, e.Name.Clone());
+    public static IndexFieldLocationExpression AsProtected(this IndexFieldLocationExpression e) => new(e.Lhs.AsProtected(), e.OpenParen, e.Indices.ConvertAll(AsProtected), e.CloseParen);
+    public static DatatypeUpdateExpr AsProtected(this DatatypeUpdateExpr e) => new(e.Origin.Clone(), e.Root.AsProtected(), e.Updates.ConvertAll(static t => Tuple.Create(t.Item1, t.Item2, t.Item3.AsProtected())));
+    public static ChainingExpression AsProtected(this ChainingExpression e) => new(e.Origin.Clone(), e.Operands.ConvertAll(AsProtected), e.Operators, e.OperatorLocs.ConvertAll(Clone), e.PrefixLimits.ConvertAll(static e => e?.AsProtected())); // TODO: shallow-copy Operators?
     public static ParensExpression AsProtected(this ParensExpression e) => new(e.Origin.Clone(), e.E.AsProtected());
-    public static DefaultValueExpression AsProtected(this DefaultValueExpression e) {
-      Contract.Assert(e.WasResolved());
-      Contract.Assert(e.Resolved is not null);
-      return NotImplemented(e);
-    }
-    public static LetExpr AsProtected(this LetExpr e) => new(
-      e.Origin.Clone(), e.LHSs.ConvertAll(cloner.CloneCasePattern), e.RHSs.ConvertAll(AsProtected), e.Body.AsProtected(), e.Exact, e.Attributes.Clone()
-    );
-    public static ApplySuffix AsProtected(this ApplySuffix e) => new(
-      e.Origin.Clone(), e.AtTok.ApplyIfNotNull(Clone), e.Lhs.AsProtected(), e.Bindings.ArgumentBindings.ConvertAll(ab => new ActualBinding(ab.FormalParameterName, ab.Actual.AsProtected(), ab.IsGhost)), e.CloseParen
-    );
-    public static StmtExpr AsProtected(this StmtExpr e) {
-      Statement ReplaceExprInStatement(Statement s) => s switch { // TODO: complete everything here, only PredicateStmt is handled properly
-        PredicateStmt stmt => stmt switch {
-          AssertStmt assert => new AssertStmt(assert.Origin.Clone(), assert.Expr.AsProtected(), assert.Label is null ? null : new AssertLabel(assert.Label.Tok, assert.Label.Name), assert.Attributes.Clone()),
-          AssumeStmt assume => new AssumeStmt(assume.Origin.Clone(), assume.Expr.AsProtected(), assume.Attributes.Clone()),
-          ExpectStmt expect => new ExpectStmt(expect.Origin.Clone(), expect.Expr.AsProtected(), cloner.CloneExpr(expect.Message), expect.Attributes.Clone()), // Protect `expect.Message`?
-          _ => throw new Cce.UnreachableException(),
-        },
-        CalcStmt stmt => stmt,
-        ForallStmt stmt => stmt,     // one could wrap a `forall` expression around the `ensures` clause, but "true" is conservative and much simpler :)
-        HideRevealStmt stmt => stmt, // one could use the definition axiom or the referenced labeled assertions, but "true" is conservative and much simpler :)
-        AssignStatement stmt => stmt,// one could use the postcondition of the method, suitably instantiated, but "true" is conservative and much simpler :)
-        BlockByProofStmt stmt => stmt,
-        _ => throw new Cce.UnreachableException(),  // unexpected statement
-      };
-      return new(e.Origin.Clone(), ReplaceExprInStatement(e.S), e.E.AsProtected());
-    }
+    public static LetOrFailExpr AsProtected(this LetOrFailExpr e) => new(e.Origin.Clone(), e.Lhs?.AsProtected(), e.Rhs.AsProtected(), e.Body.AsProtected());
+    public static NegationExpression AsProtected(this NegationExpression e) => new(e.Origin.Clone(), e.E.AsProtected());
+    public static LiteralExpr AsProtected(this LiteralExpr e) => e.Clone();
+    public static StmtExpr AsProtected(this StmtExpr e) => new(e.Origin.Clone(), e.S.AsProtected(), e.E.AsProtected());
     #endregion
 
     #region Method, Constructor and Function
-    private static Name ToProtectedName(this Name name) => $"{ModuleSplitter.Name}_{name}".ToNameNodeWithVirtualToken();
     public static MethodOrFunction AsProtected(this MethodOrFunction mof) => mof switch {
       MethodOrConstructor m => m.AsProtected(),
       Function f => f.AsProtected(),
@@ -410,11 +439,11 @@ namespace DafnyCore.IncrementalCompilation {
 
     public static Constructor AsProtected(this Constructor c) => new(
       c.Origin.Clone(),
-      c.NameNode.ToProtectedName(),
+      c.NameNode.Clone(),
       c.IsGhost,
       c.TypeArgs.ConvertAll<TypeParameter>(Clone),
       c.Ins.ConvertAll(AsProtected),
-      c.Req.ConvertAll(AsProtected), c.Reads.AsProtected(), c.Mod.AsProtected(), c.Ens.ConvertAll(AsProtectedEns),
+      c.Req.ConvertAll(static e => e.AsProtected()), c.Reads.AsProtected(), c.Mod.AsProtected(), c.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       c.Decreases.AsProtected(),
       c.Body?.AsProtected(),
       c.Attributes.Clone(), c.SignatureEllipsis?.Clone()
@@ -422,16 +451,16 @@ namespace DafnyCore.IncrementalCompilation {
     public static Method AsProtected(this Method m) => m switch {
       Lemma l => l.AsProtected(),
       TwoStateLemma l => l.AsProtected(),
-      PrefixLemma l => throw CanOnlyAppearDuringResolution(l),
+      PrefixLemma l => throw CannotAppearBeforeResolution(l),
       ExtremeLemma l => l.AsProtected(),
-      _ when m.GetType() == typeof(Method) => new(
+      _ when m.IsExactly() => new(
         m.Origin.Clone(),
-        m.NameNode.ToProtectedName(),
+        m.NameNode.Clone(),
         m.Attributes.Clone(),
         m.HasStaticKeyword, m.IsGhost,
         m.TypeArgs.ConvertAll<TypeParameter>(Clone),
         m.Ins.ConvertAll(AsProtected),
-        m.Req.ConvertAll(AsProtected), m.Ens.ConvertAll(AsProtectedEns),
+        m.Req.ConvertAll(static e => e.AsProtected()), m.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
         m.Reads.AsProtected(), m.Decreases.AsProtected(),
         m.Outs.ConvertAll(AsProtected), m.Mod.AsProtected(),
         m.Body?.AsProtected(), m.SignatureEllipsis?.Clone(),
@@ -441,21 +470,21 @@ namespace DafnyCore.IncrementalCompilation {
     };
     public static Lemma AsProtected(this Lemma l) => new(
       l.Origin.Clone(),
-      l.NameNode.ToProtectedName(),
+      l.NameNode.Clone(),
       l.HasStaticKeyword,
       l.TypeArgs.ConvertAll<TypeParameter>(Clone),
       l.Ins.ConvertAll(AsProtected), l.Outs.ConvertAll(AsProtected),
-      l.Req.ConvertAll(AsProtected), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(AsProtectedEns),
+      l.Req.ConvertAll(static e => e.AsProtected()), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone(), l.SignatureEllipsis?.Clone()
     );
     public static TwoStateLemma AsProtected(this TwoStateLemma l) => new(
       l.Origin.Clone(),
-      l.NameNode.ToProtectedName(),
+      l.NameNode.Clone(),
       l.HasStaticKeyword,
       l.TypeArgs.ConvertAll<TypeParameter>(Clone),
       l.Ins.ConvertAll(AsProtected), l.Outs.ConvertAll(AsProtected),
-      l.Req.ConvertAll(AsProtected), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(AsProtectedEns),
-      l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone(), l.SignatureEllipsis?.Clone()
+      l.Req.ConvertAll(static e => e.AsProtected()), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
+      l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone()!, l.SignatureEllipsis?.Clone()!
     );
     public static ExtremeLemma AsProtected(this ExtremeLemma l) => l switch {
       GreatestLemma gl => gl.AsProtected(),
@@ -464,37 +493,37 @@ namespace DafnyCore.IncrementalCompilation {
     };
     public static GreatestLemma AsProtected(this GreatestLemma l) => new(
       l.Origin.Clone(),
-      l.NameNode.ToProtectedName(),
+      l.NameNode.Clone(),
       l.HasStaticKeyword,
       l.TypeOfK, l.TypeArgs.ConvertAll<TypeParameter>(Clone),
       l.Ins.ConvertAll(AsProtected), l.Outs.ConvertAll(AsProtected),
-      l.Req.ConvertAll(AsProtected), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(AsProtectedEns),
+      l.Req.ConvertAll(static e => e.AsProtected()), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone(), l.SignatureEllipsis?.Clone()
     );
     public static LeastLemma AsProtected(this LeastLemma l) => new(
       l.Origin.Clone(),
-      l.NameNode.ToProtectedName(),
+      l.NameNode.Clone(),
       l.HasStaticKeyword,
       l.TypeOfK, l.TypeArgs.ConvertAll<TypeParameter>(Clone),
       l.Ins.ConvertAll(AsProtected), l.Outs.ConvertAll(AsProtected),
-      l.Req.ConvertAll(AsProtected), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(AsProtectedEns),
-      l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone(), l.SignatureEllipsis?.Clone()
+      l.Req.ConvertAll(static e => e.AsProtected()), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
+      l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone()!, l.SignatureEllipsis?.Clone()!
     );
 
     public static Function AsProtected(this Function f) => f switch {
       Predicate p => p.AsProtected(),
       TwoStateFunction tsf => tsf.AsProtected(),
-      PrefixPredicate pp => throw CanOnlyAppearDuringResolution(pp),
-      SpecialFunction sf => throw CanOnlyAppearDuringResolution(sf), // during default module resolution, still after the point where this would happen
+      PrefixPredicate pp => throw pp.CannotAppearBeforeResolution(),
+      SpecialFunction sf => throw sf.CannotAppearBeforeResolution(), // during default module resolution, still after the point where this would happen
       ExtremePredicate ep => ep.AsProtected(),
-      _ when f.GetType() == typeof(Function) => new(
+      _ when f.IsExactly() => new(
         f.Origin.Clone(),
-        f.NameNode.ToProtectedName(),
+        f.NameNode.Clone(),
         f.HasStaticKeyword, f.IsGhost, f.IsOpaque,
         f.TypeArgs.ConvertAll<TypeParameter>(Clone),
         f.Ins.ConvertAll(AsProtected),
         f.Result?.AsProtected(), f.ResultType.Clone(),
-        f.Req.ConvertAll(AsProtected), f.Reads.AsProtected(), f.Ens.ConvertAll(AsProtectedEns), f.Decreases.AsProtected(),
+        f.Req.ConvertAll(static e => e.AsProtected()), f.Reads.AsProtected(), f.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)), f.Decreases.AsProtected(),
         f.Body?.AsProtected(),
         f.ByMethodTok?.Clone(), f.ByMethodBody?.AsProtected(),
         f.Attributes.Clone(), f.SignatureEllipsis?.Clone()
@@ -503,26 +532,26 @@ namespace DafnyCore.IncrementalCompilation {
     };
     public static Predicate AsProtected(this Predicate p) => new(
       p.Origin.Clone(),
-      p.NameNode.ToProtectedName(),
+      p.NameNode.Clone(),
       p.HasStaticKeyword, p.IsGhost, p.IsOpaque,
       p.TypeArgs.ConvertAll<TypeParameter>(Clone),
       p.Ins.ConvertAll(AsProtected),
       p.Result?.AsProtected(),
-      p.Req.ConvertAll(AsProtected), p.Reads.AsProtected(), p.Ens.ConvertAll(AsProtectedEns), p.Decreases.AsProtected(),
+      p.Req.ConvertAll(static e => e.AsProtected()), p.Reads.AsProtected(), p.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)), p.Decreases.AsProtected(),
       p.Body?.AsProtected(), p.BodyOrigin,
       p.ByMethodTok?.Clone(), p.ByMethodBody?.AsProtected(),
       p.Attributes.Clone(), p.SignatureEllipsis?.Clone()
     );
     public static TwoStateFunction AsProtected(this TwoStateFunction f) => f switch {
       TwoStatePredicate p => p.AsProtected(),
-      _ when f.GetType() == typeof(TwoStateFunction) => new TwoStateFunction(
+      _ when f.IsExactly() => new TwoStateFunction(
         f.Origin.Clone(),
-        f.NameNode.ToProtectedName(),
+        f.NameNode.Clone(),
         f.HasStaticKeyword, f.IsOpaque,
         f.TypeArgs.ConvertAll<TypeParameter>(Clone),
         f.Ins.ConvertAll(AsProtected),
         f.Result?.AsProtected(), f.ResultType.Clone(),
-        f.Req.ConvertAll(AsProtected), f.Reads.AsProtected(), f.Ens.ConvertAll(AsProtectedEns), f.Decreases.AsProtected(),
+        f.Req.ConvertAll(static e => e.AsProtected()), f.Reads.AsProtected(), f.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)), f.Decreases.AsProtected(),
         f.Body?.AsProtected(),
         f.Attributes.Clone(), f.SignatureEllipsis?.Clone()
       ),
@@ -530,12 +559,12 @@ namespace DafnyCore.IncrementalCompilation {
     };
     public static TwoStatePredicate AsProtected(this TwoStatePredicate p) => new(
       p.Origin.Clone(),
-      p.NameNode.ToProtectedName(),
+      p.NameNode.Clone(),
       p.HasStaticKeyword, p.IsOpaque,
       p.TypeArgs.ConvertAll<TypeParameter>(Clone),
       p.Ins.ConvertAll(AsProtected),
       p.Result?.AsProtected(),
-      p.Req.ConvertAll(AsProtected), p.Reads.AsProtected(), p.Ens.ConvertAll(AsProtectedEns), p.Decreases.AsProtected(),
+      p.Req.ConvertAll(static e => e.AsProtected()), p.Reads.AsProtected(), p.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)), p.Decreases.AsProtected(),
       p.Body?.AsProtected(),
       p.Attributes.Clone(), p.SignatureEllipsis?.Clone()
     );
@@ -546,25 +575,25 @@ namespace DafnyCore.IncrementalCompilation {
     };
     public static GreatestPredicate AsProtected(this GreatestPredicate p) => new(
       p.Origin.Clone(),
-      p.NameNode.ToProtectedName(),
+      p.NameNode.Clone(),
       p.HasStaticKeyword, p.IsOpaque,
       p.TypeOfK, p.TypeArgs.ConvertAll<TypeParameter>(Clone),
       p.Ins.ConvertAll(AsProtected),
       p.Result?.AsProtected(),
-      p.Req.ConvertAll(AsProtected), p.Reads.AsProtected(), p.Ens.ConvertAll(AsProtectedEns),
+      p.Req.ConvertAll(static e => e.AsProtected()), p.Reads.AsProtected(), p.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       p.Body!.AsProtected(),
       p.Attributes.Clone(), p.SignatureEllipsis?.Clone()
     );
     public static LeastPredicate AsProtected(this LeastPredicate p) => new(
       p.Origin.Clone(),
-      p.NameNode.ToProtectedName(),
+      p.NameNode.Clone(),
       p.HasStaticKeyword, p.IsOpaque,
       p.TypeOfK, p.TypeArgs.ConvertAll<TypeParameter>(Clone),
       p.Ins.ConvertAll(AsProtected),
-      p.Result?.AsProtected(),
-      p.Req.ConvertAll(AsProtected), p.Reads.AsProtected(), p.Ens.ConvertAll(AsProtectedEns),
+      p.Result?.AsProtected()!,
+      p.Req.ConvertAll(static e => e.AsProtected()), p.Reads.AsProtected(), p.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       p.Body!.AsProtected(),
-      p.Attributes.Clone(), p.SignatureEllipsis?.Clone()
+      p.Attributes.Clone()!, p.SignatureEllipsis?.Clone()!
     );
     #endregion
     public static void Protect(this LiteralModuleDecl decl) {
@@ -574,9 +603,13 @@ namespace DafnyCore.IncrementalCompilation {
       }
       foreach (var sd in decl.ModuleDef.SourceDecls) {
         switch (sd) {
-          case LiteralModuleDecl inner_lmd: inner_lmd.Protect(); break;
-          case ModuleExportDecl or AbstractModuleDecl or AliasModuleDecl: break; // nothing to be done on imports or exports
-          case ModuleDecl: throw new UnreachableException();
+          case LiteralModuleDecl inner_lmd:
+            inner_lmd.Protect();
+            break;
+          case ModuleExportDecl or AbstractModuleDecl or AliasModuleDecl:
+            break; // nothing to be done on imports or exports
+          case ModuleDecl:
+            throw new UnreachableException();
           case IteratorDecl id:
             throw new NotImplementedException();
             break;

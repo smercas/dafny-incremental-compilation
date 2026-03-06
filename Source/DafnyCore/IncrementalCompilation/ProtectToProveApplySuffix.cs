@@ -1,6 +1,7 @@
 ﻿using Microsoft.Dafny;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Numerics;
@@ -8,7 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace DafnyCore.IncrementalCompilation {
-  internal class ProtectToProveApplySuffix : ApplySuffix {
+  internal class ProtectToProveApplySuffix : ApplySuffix, ICloneable<ProtectToProveApplySuffix> {
     private static Comparer<ProtectToProveApplySuffix> comparer { get; } = Comparer<ProtectToProveApplySuffix>.Create((l, r) => {
       int cmp = string.Compare(l.Origin.Uri.AbsoluteUri, r.Origin.Uri.AbsoluteUri);
       if (cmp != 0) { return cmp; }
@@ -31,6 +32,11 @@ namespace DafnyCore.IncrementalCompilation {
     private static readonly Expression PlaceholderScope = new SeqDisplayExpr(SourceOrigin.NoToken, []);
     private static readonly Expression PlaceholderId = new LiteralExpr(SourceOrigin.NoToken);
 
+    public ProtectToProveApplySuffix(Cloner cloner, ProtectToProveApplySuffix original) : base(cloner, original) {
+      throw new UnreachableException("not sure if it can be reached, I sincerely hope it can't");
+    }
+    ProtectToProveApplySuffix ICloneable<ProtectToProveApplySuffix>.Clone(Cloner cloner) => new(cloner, this);
+
     [SyntaxConstructor]
     public ProtectToProveApplySuffix(Expression e) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
         new(null, e.AsProtected()),
@@ -42,8 +48,7 @@ namespace DafnyCore.IncrementalCompilation {
       Contract.Ensures(IsValidPreResolve);
       instances.Add(this);
     }
-    public ProtectToProveApplySuffix(Expression e, BigInteger immediateOrder) : base(e.Origin, null,
-      ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
+    public ProtectToProveApplySuffix(Expression e, BigInteger immediateOrder) : base(e.Origin, null, ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
         new(null, e.AsProtected()),
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
         new(null, PlaceholderScope),

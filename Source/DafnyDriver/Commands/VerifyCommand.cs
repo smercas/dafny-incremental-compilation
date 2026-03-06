@@ -146,6 +146,7 @@ public static class VerifyCommand {
 
           verificationResults = new();
 
+          Console.ResetColor();
           ReportVerificationDiagnostics(compilation, verificationResults);
           verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
           proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);

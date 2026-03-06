@@ -111,7 +111,7 @@ public static class ProtectorFunctions {
     // I do NOT like that piece of code (:
     nameNode: new(name),
     hasStaticKeyword: false,
-    isGhost: true,
+    isGhost: false,
     isOpaque: true,
     typeArgs: typeArgs,
     ins: signature.args,

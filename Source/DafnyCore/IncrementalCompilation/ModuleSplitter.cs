@@ -82,7 +82,7 @@ namespace DafnyCore.IncrementalCompilation {
           var refinement_target_parts = trace.Select(d => d.Name);
           if (EnclosingDecl is not DefaultClassDecl) { refinement_target_parts = refinement_target_parts.Append(EnclosingDecl.Name); }
           var def = new ModuleDefinition(
-            OriginalModuleDef.Origin,
+            MemberDecl.Origin,
             $"{string.Join("_", refinement_target_parts)}_{MemberDecl.Name}".ToNameNodeWithVirtualToken(),
             [],
             ModuleKindEnum.Abstract,
@@ -94,12 +94,16 @@ namespace DafnyCore.IncrementalCompilation {
           var decl = new LiteralModuleDecl(dafnyOptions, def, root, Guid.NewGuid());
           return decl;
         }
-        protected abstract M CreateDuplicateOfMemberDecl();
+        protected abstract void AlterOriginalMemberDecl();
+        protected abstract M CreateDuplicateOfOriginalMemberDecl();
         public override TopLevelDecl Process(DafnyOptions dafnyOptions, DefaultModuleDefinition root) {
           var new_decl = CreateModule(dafnyOptions, root);
           switch (EnclosingDecl) {
             case DefaultClassDecl:
-              new_decl.ModuleDef.DefaultClass!.Members.Add(CreateDuplicateOfMemberDecl());
+              var new_member = CreateDuplicateOfOriginalMemberDecl();
+              new_member.NameNode = $"{Name}_{new_member.NameNode}".ToNameNodeWithVirtualToken();
+              new_decl.ModuleDef.DefaultClass!.Members.Add(new_member);
+              AlterOriginalMemberDecl();
               new_decl.ModuleDef.DefaultClass!.SetMembersBeforeResolution();
               break;
           }
@@ -107,16 +111,14 @@ namespace DafnyCore.IncrementalCompilation {
         }
       }
       public class FromConstantField<E>(E enclosingDecl, ConstantField constantField) : FromMemberDecl<E, ConstantField>(enclosingDecl, constantField) where E : TopLevelDeclWithMembers {
-        protected override ConstantField CreateDuplicateOfMemberDecl() {
-          var ncf = new ConstantField(new(), MemberDecl);
-          ncf.NameNode = new($"{Name}_{ncf.NameNode}");
-          return ncf;
-        }
+        protected override ConstantField CreateDuplicateOfOriginalMemberDecl() => throw new NotImplementedException();
+        protected override void AlterOriginalMemberDecl() => throw new NotImplementedException();
       }
-      public class FromMethodOrFunction<E, M>(E enclosingDecl, M methodOrFunction, IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> attrInContract, IReadOnlySet<AttributesAccessor> attrInBody) : FromMemberDecl<E, M>(enclosingDecl, methodOrFunction) where E : TopLevelDeclWithMembers where M : MethodOrFunction {
+      public class FromMethodOrFunction<E>(E enclosingDecl, MethodOrFunction methodOrFunction, IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> attrInContract, IReadOnlySet<AttributesAccessor> attrInBody) : FromMemberDecl<E, MethodOrFunction>(enclosingDecl, methodOrFunction) where E : TopLevelDeclWithMembers {
         private IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> AttrInContract { get; } = attrInContract;
         private IReadOnlySet<AttributesAccessor> AttrInBody { get; } = attrInBody;
-        private void AlterOriginalMemberDecl() {
+        protected override MethodOrFunction CreateDuplicateOfOriginalMemberDecl() => MemberDecl.AsProtected();
+        protected override void AlterOriginalMemberDecl() {
           foreach (var acc in Microsoft.Dafny.Util.Concat(AttrInContract.Values.SelectMany(v => v), AttrInBody)) {
             (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, AttributeName);
           }
@@ -130,40 +132,6 @@ namespace DafnyCore.IncrementalCompilation {
           )) {
             (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, ImmediateAttributeName);
           }
-        }
-        protected override M CreateDuplicateOfMemberDecl() {
-          M result = null!;
-          switch (MemberDecl) {
-            case PrefixPredicate or SpecialFunction:
-              throw new UnreachableException();
-            case GreatestPredicate or LeastPredicate or TwoStatePredicate or TwoStateFunction:
-              throw new NotImplementedException("only functions, predicates and lemmas are allowed");
-            case Predicate p:
-              var np = new Cloner().CloneFunction(p);
-              np.NameNode = new($"{Name}_{np.NameNode}");
-              result = (np as M)!;
-              break;
-            case Microsoft.Dafny.Function f:
-              var nf = new Cloner().CloneFunction(f);
-              nf.NameNode = new($"{Name}_{nf.NameNode}");
-              result = (nf as M)!;
-              break;
-            case PrefixLemma:
-              throw new UnreachableException();
-            case GreatestLemma or LeastLemma or TwoStateLemma or Constructor:
-              throw new NotImplementedException("only functions, predicates and lemmas are allowed");
-            case Lemma l:
-              var nl = new Lemma(new(), l);
-              nl.NameNode = new($"{Name}_{nl.NameNode}");
-              result = (nl as M)!;
-              break;
-            case Method:
-              throw new NotImplementedException("only functions, predicates and lemmas are allowed");
-            default:
-              throw new UnreachableException();
-          }
-          AlterOriginalMemberDecl();
-          return result;
         }
       }
       public class FromIteratorDecl(IteratorDecl iteratorDecl) : RefiningModuleGenerator {
@@ -181,7 +149,7 @@ namespace DafnyCore.IncrementalCompilation {
     }
 
     #endregion
-    private IEnumerable<RefiningModuleGenerator> Split(LiteralModuleDecl lmd) {
+    private static IEnumerable<RefiningModuleGenerator> Split(LiteralModuleDecl lmd) {
       Contract.Requires(lmd.ModuleDef.ModuleKind is (ModuleKindEnum.Abstract or ModuleKindEnum.Concrete),
         $"module must be either abstract or concrete, but is {lmd.ModuleDef.ModuleKind}");
       lmd.ModuleDef.ModuleKind = ModuleKindEnum.Abstract;
@@ -212,17 +180,33 @@ namespace DafnyCore.IncrementalCompilation {
         }
       }
     }
-    private IEnumerable<RefiningModuleGenerator> Split(IteratorDecl id) {
+    private static IEnumerable<RefiningModuleGenerator> Split(IteratorDecl id) {
       if (id.Body is null) { yield break; }
       yield break;
       yield return new RefiningModuleGenerator.FromIteratorDecl(id);
     }
-    private IEnumerable<RefiningModuleGenerator> Split(SubsetTypeDecl std) {
+    private static IEnumerable<RefiningModuleGenerator> Split(SubsetTypeDecl std) {
       if (std.Witness is null) { yield break; } // ??? maybe constraint also plays a role here?
       yield break;
       yield return new RefiningModuleGenerator.FromSubSetTypeDecl(std);
     }
-    private IEnumerable<RefiningModuleGenerator> Split<E>(E dcd) where E : TopLevelDeclWithMembers {
+    private class VerificationExclusionaryOrigin(IOrigin o) : IOrigin {
+      public bool IncludesRange => o.IncludesRange;
+      public Uri Uri => o.Uri;
+      public TokenRange? EntireRange => o.EntireRange;
+      public TokenRange ReportingRange => o.ReportingRange;
+      public bool IsCopy => true;
+      public bool IsSourceToken => o.IsSourceToken;
+      public int kind { get => o.kind; set => o.kind = value; }
+      public int pos { get => o.pos; set => o.pos = value; }
+      public int col { get => o.col; set => o.col = value; }
+      public int line { get => o.line; set => o.line = value; }
+      public string val { get => o.val; set => o.val = value; }
+      public bool IsValid => o.IsValid;
+      public int CompareTo(IToken? other) => o.CompareTo(other);
+      public bool IsInherited(ModuleDefinition m) => o.IsInherited(m);
+    }
+    private static IEnumerable<RefiningModuleGenerator> Split<E>(E dcd) where E : TopLevelDeclWithMembers {
       bool canHaveConstructors = dcd is ClassDecl or TraitDecl;
       foreach (var member in dcd.Members) {
         switch (member) {
@@ -233,18 +217,21 @@ namespace DafnyCore.IncrementalCompilation {
           case Field: break;
           case MethodOrFunction m_or_f:
             //var contractWithAttr = Microsoft.Dafny.Util.Concat(m_or_f.Req.Where(HasAttr), m_or_f.Ens.Where(HasAttr)).ToImmutableHashSet();
-            var attrInContract = m_or_f.Ens.ToImmutableDictionary(e => e, e => ContainingAttr(e, AttributeName).ToImmutableHashSet() as IReadOnlySet<AttributesAccessor>);
+            var attrInContract = m_or_f.Ens.SelectWhere(ens => {
+              var attrs = ContainingAttr(ens, AttributeName).ToImmutableHashSet() as IReadOnlySet<AttributesAccessor>;
+              return (attrs.Count != 0, (ens, attrs));
+            }).ToImmutableDictionary(p => p.ens, p => p.attrs);
             switch (m_or_f) {
               case Microsoft.Dafny.Function { Body: not null } f
                   when ContainingAttr(f.Body, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
-                yield return new RefiningModuleGenerator.FromMethodOrFunction<E, Microsoft.Dafny.Function>(dcd, f, attrInContract, assertsWithAttr);
+                yield return new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, f, attrInContract, assertsWithAttr);
                 break;
               case Microsoft.Dafny.Function: break;
               case MethodOrConstructor { Body: not null } m_or_c when
                   ContainingAttr(m_or_c.Body, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
                 yield return m_or_c switch {
-                  Method m => new RefiningModuleGenerator.FromMethodOrFunction<E, Method>(dcd, m, attrInContract, assertsWithAttr),
-                  Constructor c => new RefiningModuleGenerator.FromMethodOrFunction<E, Constructor>(dcd, c, attrInContract, assertsWithAttr),
+                  Method m => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, m, attrInContract, assertsWithAttr),
+                  Constructor c => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, c, attrInContract, assertsWithAttr),
                   _ => throw new UnreachableException(),
                 };
                 break;
@@ -255,6 +242,7 @@ namespace DafnyCore.IncrementalCompilation {
           default:
             throw new UnreachableException();
         }
+        if (member is ICanVerify) { member.SetOrigin(new VerificationExclusionaryOrigin(member.Origin)); }
       }
     }
     public static bool HasAttr(Attributes? attrs, string attr) => Attributes.Contains(attrs, attr);

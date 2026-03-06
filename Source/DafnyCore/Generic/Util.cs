@@ -10,7 +10,6 @@ using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
-using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -66,6 +65,26 @@ namespace Microsoft.Dafny {
         }
       }
     }
+    public static IEnumerable<T> WithTheLastElementRepeated<T>(this IEnumerable<T> es) {
+      using var enumerator = es.GetEnumerator();
+
+      if (!enumerator.MoveNext()) { yield break; }
+
+      T last;
+      do {
+        last = enumerator.Current;
+        yield return last;
+      } while (enumerator.MoveNext());
+
+      yield return last;
+    }
+    public static IReadOnlyList<O> ConvertAll<T, O>(this IReadOnlyList<T> l, Converter<T, O> converter) {
+      if (l is List<T> ll) { return ll.ConvertAll(converter); }
+      var r = new List<O>(l.Count);
+      r.AddRange(l.Select(e => converter(e)));
+      return r;
+    }
+    public static bool IsExactly<T>(this T o) where T : notnull => o.GetType() == typeof(T);
     public static IEnumerable<R> SelectWhere<T, R>(this IEnumerable<T> es, Func<T, (bool, R)> f) {
       foreach (var e in es) {
         (bool not_filtered_out, R result) = f(e);

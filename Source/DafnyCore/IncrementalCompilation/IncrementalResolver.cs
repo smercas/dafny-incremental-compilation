@@ -32,10 +32,10 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
 
     Type.EnableScopes();
 
-    var moduleWithOldRootStuff = new ModuleSplitter(Options).Split(Program);
     ProtectToProveApplySuffix.ResetInstances();
-    Program.DefaultModule.Protect();
+    var moduleWithOldRootStuff = new ModuleSplitter(Options).Split(Program);
     ProtectToProveApplySuffix.AssignEntryPoints();
+    moduleWithOldRootStuff.Protect();
     AddProtectorsModule();
     new ProtectorsImporter(Options).ImportIn(moduleWithOldRootStuff); // importing in this module transfers the imports to all the other modules
 
