@@ -12,7 +12,7 @@ using Microsoft.Boogie;
 using Microsoft.Dafny;
 
 namespace DafnyCore.IncrementalCompilation {
-  internal class ModuleSplitter(DafnyOptions dafnyOptions) {
+  public class ModuleSplitter(DafnyOptions dafnyOptions) {
     private DafnyOptions DafnyOptions => dafnyOptions;
     public static readonly string Name = "_IPM";
     public static readonly string AttributeName = "ipm";
@@ -190,7 +190,7 @@ namespace DafnyCore.IncrementalCompilation {
       yield break;
       yield return new RefiningModuleGenerator.FromSubSetTypeDecl(std);
     }
-    private class VerificationExclusionaryOrigin(IOrigin o) : IOrigin {
+    public class VerificationExclusionaryOrigin(IOrigin o) : IOrigin {
       public bool IncludesRange => o.IncludesRange;
       public Uri Uri => o.Uri;
       public TokenRange? EntireRange => o.EntireRange;
@@ -223,12 +223,12 @@ namespace DafnyCore.IncrementalCompilation {
             }).ToImmutableDictionary(p => p.ens, p => p.attrs);
             switch (m_or_f) {
               case Microsoft.Dafny.Function { Body: not null } f
-                  when ContainingAttr(f.Body, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
+                  when ContainingAttr(f, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
                 yield return new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, f, attrInContract, assertsWithAttr);
                 break;
               case Microsoft.Dafny.Function: break;
               case MethodOrConstructor { Body: not null } m_or_c when
-                  ContainingAttr(m_or_c.Body, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
+                  ContainingAttr(m_or_c, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
                 yield return m_or_c switch {
                   Method m => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, m, attrInContract, assertsWithAttr),
                   Constructor c => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, c, attrInContract, assertsWithAttr),
@@ -253,6 +253,21 @@ namespace DafnyCore.IncrementalCompilation {
     public static IEnumerable<AttributesAccessor> ContainingAttr(Expression e, string attr) => e.PreResolveRecursiveSubStatements().OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes, attr)).Select(s => new AttributesAccessor(s));
 
     public static IEnumerable<AttributesAccessor> ContainingAttr(Statement s, string attr) => s.PreResolveRecursiveSubStatements().OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes, attr)).Select(s => new AttributesAccessor(s));
+
+    public static IEnumerable<AttributesAccessor> ContainingAttr(MethodOrFunction m_or_f, string attr) =>
+      Microsoft.Dafny.Util.Concat(
+        Microsoft.Dafny.Util.Concat(
+          Microsoft.Dafny.Util.Concat(m_or_f.Req, m_or_f.Ens).Select(static ae => ae.E),
+          Microsoft.Dafny.Util.Concat([m_or_f.Reads], m_or_f switch { MethodOrConstructor m_or_c => [m_or_c.Mod], Microsoft.Dafny.Function => [], _ => throw new UnreachableException(), })
+            .SelectMany(static s => s.Expressions ?? []).Select(static fe => fe.OriginalExpression),
+          m_or_f.Decreases.Expressions ?? []
+        ).SelectMany(static e => e.PreResolveRecursiveSubStatements()),
+        m_or_f switch {
+          MethodOrConstructor { Body: not null } m_or_c => m_or_c.Body.PreResolveRecursiveSubStatements(),
+          Microsoft.Dafny.Function { Body: not null } f => f.Body.PreResolveRecursiveSubStatements(),
+          _ => throw new UnreachableException(),
+        } ?? []
+      ).OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes, attr)).Select(s => new AttributesAccessor(s));
     public class AttributesAccessor {
       private Func<Attributes?> get { get; }
       private Action<Attributes?> set { get; }

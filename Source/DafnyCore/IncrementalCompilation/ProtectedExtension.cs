@@ -7,21 +7,43 @@ using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Numerics;
+using System.Threading;
 using static DafnyCore.IncrementalCompilation.ProtectorFunctions;
 using static Microsoft.Dafny.CalcStmt;
 
 namespace DafnyCore.IncrementalCompilation {
   internal static class ProtectedExtension { // FOR THE LOVE OF GOD LET'S KEEP THIS BEFORE THE RESOLUTION
-    private static Expression? CustomAssertExprProtection(AssertStmt a) {
+    #region protection context
+    private static AsyncLocal<Stack<(MemberDecl, Stack<IAttributeBearingDeclaration>)>> AsyncLocalContext { get; } = new();
+    private static Stack<(MemberDecl, Stack<IAttributeBearingDeclaration>)> Context => AsyncLocalContext.Value ??= new();
+    public static T WithAdditionalContext<T>(MemberDecl memberDecl, Func<T> f) {
+      Context.Push((memberDecl, []));
+      var r = f();
+      Context.Pop();
+      return r;
+    }
+    public static T WithAdditionalContext<T>(IAttributeBearingDeclaration attributeBearingDeclaration, Func<T> f) {
+      Context.Peek().Item2.Push(attributeBearingDeclaration);
+      var r = f();
+      Context.Peek().Item2.Pop();
+      return r;
+    }
+    // if `Last` isn't called with something in both stacks, geniunely what're we doing?
+    public static (MemberDecl, Stack<IAttributeBearingDeclaration>) MostRecentContext => Context.Peek();
+    #endregion
+    private static ApplySuffix? CustomAssertExprProtection(AssertStmt a) {
       var attributeName = ModuleSplitter.AttributeName;
+      var immediateAttributeName = ModuleSplitter.ImmediateAttributeName;
       if (Attributes.Contains(a.Attributes, attributeName)) {
         //Console.WriteLine("Protecting to prove assertion " + a.Expr.ToString());
-        return a.Expr.WrappedWith(ProtectToProve);
+        return a.Expr.WrappedWith(ProtectToProve with {
+          ChangeContext = WithAdditionalContext(a, () => new ProtectToProveApplySuffix.ChangeContext(MostRecentContext)),
+        });
       }
-      if (Attributes.Find(a.Attributes, attributeName + "_now") is { } attr) {
+      if (Attributes.Find(a.Attributes, immediateAttributeName) is { } attr) {
         if (attr is { Args: [] }) { attr.Args.Add(new LiteralExpr(SourceOrigin.NoToken, 0)); } // temporary bcs frontend doesn't use {:ipm_now 0} yet
-        if (attr is not { Args: [var arg] }) { throw new Exception($"the {{:{attributeName}_now}} attribute requires an argument"); }
-        if (arg is not LiteralExpr { Value: BigInteger entryPoint }) { throw new Exception($"{{:{attributeName}_now}}'s argument needs to be a natural number"); }
+        if (attr is not { Args: [var arg] }) { throw new Exception($"the {{:{immediateAttributeName}}} attribute requires an argument"); }
+        if (arg is not LiteralExpr { Value: BigInteger entryPoint }) { throw new Exception($"{{:{immediateAttributeName}}}'s argument needs to be a natural number"); }
         return a.Expr.WrappedWith(ProtectToProveImmediate with { EntryPoint = entryPoint });
       }
       //Console.WriteLine($"assert statement: {a.Expr}");
@@ -105,8 +127,10 @@ namespace DafnyCore.IncrementalCompilation {
 
     public enum AEKind { Ensures };
     public static AttributedExpression AsProtected(this AttributedExpression e, AEKind? kind = null) => new(kind switch {
-      null => e.E.AsProtected(),
-      AEKind.Ensures => Attributes.Contains(e.Attributes, ModuleSplitter.AttributeName) ? e.E.WrappedWith(ProtectToProve) : e.E.AsProtected(),
+      AEKind.Ensures when Attributes.Contains(e.Attributes, ModuleSplitter.AttributeName) => e.E.WrappedWith(ProtectToProve with {
+        ChangeContext = WithAdditionalContext(e, () => new ProtectToProveApplySuffix.ChangeContext(MostRecentContext)),
+      }),
+      null or AEKind.Ensures => e.E.AsProtected(),
       _ => throw new UnreachableException(),
     }, e.Label?.Clone(), e.Attributes.Clone());
 
@@ -210,7 +234,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static AssumeStmt AsProtected(this AssumeStmt s) => new(s.Origin.Clone(), s.Expr.AsProtected(), s.Attributes.Clone());
     public static ExpectStmt AsProtected(this ExpectStmt s) => new(s.Origin.Clone(), s.Expr.AsProtected(), s.Message.Clone(), s.Attributes.Clone());
     #endregion
-    public static BlockByProofStmt AsProtected(this BlockByProofStmt s) => new(s.Origin.Clone(), s.Proof.AsProtected(), s.Body.AsProtected(), s.Attributes.Clone());
+    public static BlockByProofStmt AsProtected(this BlockByProofStmt s) => new(s.Origin.Clone(), s.Proof.AsProtected(), s.Body is AssertStmt ? WithAdditionalContext(s, () => s.Body.AsProtected()) : s.Body.AsProtected(), s.Attributes.Clone());
     public static CalcStmt AsProtected(this CalcStmt s) {
       List<Expression> lines;
       switch (s.Lines.Count) {
@@ -437,7 +461,7 @@ namespace DafnyCore.IncrementalCompilation {
       _ => throw new UnreachableException(),
     };
 
-    public static Constructor AsProtected(this Constructor c) => new(
+    public static Constructor AsProtected(this Constructor c) => WithAdditionalContext(c, () => new Constructor(
       c.Origin.Clone(),
       c.NameNode.Clone(),
       c.IsGhost,
@@ -447,13 +471,14 @@ namespace DafnyCore.IncrementalCompilation {
       c.Decreases.AsProtected(),
       c.Body?.AsProtected(),
       c.Attributes.Clone(), c.SignatureEllipsis?.Clone()
-    );
+    ));
+
     public static Method AsProtected(this Method m) => m switch {
       Lemma l => l.AsProtected(),
       TwoStateLemma l => l.AsProtected(),
       PrefixLemma l => throw CannotAppearBeforeResolution(l),
       ExtremeLemma l => l.AsProtected(),
-      _ when m.IsExactly() => new(
+      _ when m.IsExactly() => WithAdditionalContext(m, () => new Method(
         m.Origin.Clone(),
         m.NameNode.Clone(),
         m.Attributes.Clone(),
@@ -465,10 +490,10 @@ namespace DafnyCore.IncrementalCompilation {
         m.Outs.ConvertAll(AsProtected), m.Mod.AsProtected(),
         m.Body?.AsProtected(), m.SignatureEllipsis?.Clone(),
         m.IsByMethod
-      ),
+      )),
       _ => throw new UnreachableException(),
     };
-    public static Lemma AsProtected(this Lemma l) => new(
+    public static Lemma AsProtected(this Lemma l) => WithAdditionalContext(l, () => new Lemma(
       l.Origin.Clone(),
       l.NameNode.Clone(),
       l.HasStaticKeyword,
@@ -476,8 +501,8 @@ namespace DafnyCore.IncrementalCompilation {
       l.Ins.ConvertAll(AsProtected), l.Outs.ConvertAll(AsProtected),
       l.Req.ConvertAll(static e => e.AsProtected()), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone(), l.SignatureEllipsis?.Clone()
-    );
-    public static TwoStateLemma AsProtected(this TwoStateLemma l) => new(
+    ));
+    public static TwoStateLemma AsProtected(this TwoStateLemma l) => WithAdditionalContext(l, () => new TwoStateLemma(
       l.Origin.Clone(),
       l.NameNode.Clone(),
       l.HasStaticKeyword,
@@ -485,13 +510,13 @@ namespace DafnyCore.IncrementalCompilation {
       l.Ins.ConvertAll(AsProtected), l.Outs.ConvertAll(AsProtected),
       l.Req.ConvertAll(static e => e.AsProtected()), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone()!, l.SignatureEllipsis?.Clone()!
-    );
+    ));
     public static ExtremeLemma AsProtected(this ExtremeLemma l) => l switch {
       GreatestLemma gl => gl.AsProtected(),
       LeastLemma ll => ll.AsProtected(),
       _ => throw new UnreachableException(),
     };
-    public static GreatestLemma AsProtected(this GreatestLemma l) => new(
+    public static GreatestLemma AsProtected(this GreatestLemma l) => WithAdditionalContext(l, () => new GreatestLemma(
       l.Origin.Clone(),
       l.NameNode.Clone(),
       l.HasStaticKeyword,
@@ -499,8 +524,8 @@ namespace DafnyCore.IncrementalCompilation {
       l.Ins.ConvertAll(AsProtected), l.Outs.ConvertAll(AsProtected),
       l.Req.ConvertAll(static e => e.AsProtected()), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone(), l.SignatureEllipsis?.Clone()
-    );
-    public static LeastLemma AsProtected(this LeastLemma l) => new(
+    ));
+    public static LeastLemma AsProtected(this LeastLemma l) => WithAdditionalContext(l, () => new LeastLemma(
       l.Origin.Clone(),
       l.NameNode.Clone(),
       l.HasStaticKeyword,
@@ -508,7 +533,7 @@ namespace DafnyCore.IncrementalCompilation {
       l.Ins.ConvertAll(AsProtected), l.Outs.ConvertAll(AsProtected),
       l.Req.ConvertAll(static e => e.AsProtected()), l.Reads.AsProtected(), l.Mod.AsProtected(), l.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       l.Decreases.AsProtected(), l.Body!.AsProtected(), l.Attributes.Clone()!, l.SignatureEllipsis?.Clone()!
-    );
+    ));
 
     public static Function AsProtected(this Function f) => f switch {
       Predicate p => p.AsProtected(),
@@ -516,7 +541,7 @@ namespace DafnyCore.IncrementalCompilation {
       PrefixPredicate pp => throw pp.CannotAppearBeforeResolution(),
       SpecialFunction sf => throw sf.CannotAppearBeforeResolution(), // during default module resolution, still after the point where this would happen
       ExtremePredicate ep => ep.AsProtected(),
-      _ when f.IsExactly() => new(
+      _ when f.IsExactly() => WithAdditionalContext(f, () => new Function(
         f.Origin.Clone(),
         f.NameNode.Clone(),
         f.HasStaticKeyword, f.IsGhost, f.IsOpaque,
@@ -527,10 +552,10 @@ namespace DafnyCore.IncrementalCompilation {
         f.Body?.AsProtected(),
         f.ByMethodTok?.Clone(), f.ByMethodBody?.AsProtected(),
         f.Attributes.Clone(), f.SignatureEllipsis?.Clone()
-      ),
+      )),
       _ => throw new UnreachableException(),
     };
-    public static Predicate AsProtected(this Predicate p) => new(
+    public static Predicate AsProtected(this Predicate p) => WithAdditionalContext(p, () => new Predicate(
       p.Origin.Clone(),
       p.NameNode.Clone(),
       p.HasStaticKeyword, p.IsGhost, p.IsOpaque,
@@ -541,10 +566,10 @@ namespace DafnyCore.IncrementalCompilation {
       p.Body?.AsProtected(), p.BodyOrigin,
       p.ByMethodTok?.Clone(), p.ByMethodBody?.AsProtected(),
       p.Attributes.Clone(), p.SignatureEllipsis?.Clone()
-    );
+    ));
     public static TwoStateFunction AsProtected(this TwoStateFunction f) => f switch {
       TwoStatePredicate p => p.AsProtected(),
-      _ when f.IsExactly() => new TwoStateFunction(
+      _ when f.IsExactly() => WithAdditionalContext(f, () => new TwoStateFunction(
         f.Origin.Clone(),
         f.NameNode.Clone(),
         f.HasStaticKeyword, f.IsOpaque,
@@ -554,10 +579,10 @@ namespace DafnyCore.IncrementalCompilation {
         f.Req.ConvertAll(static e => e.AsProtected()), f.Reads.AsProtected(), f.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)), f.Decreases.AsProtected(),
         f.Body?.AsProtected(),
         f.Attributes.Clone(), f.SignatureEllipsis?.Clone()
-      ),
+      )),
       _ => throw new UnreachableException(),
     };
-    public static TwoStatePredicate AsProtected(this TwoStatePredicate p) => new(
+    public static TwoStatePredicate AsProtected(this TwoStatePredicate p) => WithAdditionalContext(p, () => new TwoStatePredicate(
       p.Origin.Clone(),
       p.NameNode.Clone(),
       p.HasStaticKeyword, p.IsOpaque,
@@ -567,13 +592,13 @@ namespace DafnyCore.IncrementalCompilation {
       p.Req.ConvertAll(static e => e.AsProtected()), p.Reads.AsProtected(), p.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)), p.Decreases.AsProtected(),
       p.Body?.AsProtected(),
       p.Attributes.Clone(), p.SignatureEllipsis?.Clone()
-    );
+    ));
     public static ExtremePredicate AsProtected(this ExtremePredicate p) => p switch {
       GreatestPredicate gp => gp.AsProtected(),
       LeastPredicate lp => lp.AsProtected(),
       _ => throw new UnreachableException(),
     };
-    public static GreatestPredicate AsProtected(this GreatestPredicate p) => new(
+    public static GreatestPredicate AsProtected(this GreatestPredicate p) => WithAdditionalContext(p, () => new GreatestPredicate(
       p.Origin.Clone(),
       p.NameNode.Clone(),
       p.HasStaticKeyword, p.IsOpaque,
@@ -583,8 +608,8 @@ namespace DafnyCore.IncrementalCompilation {
       p.Req.ConvertAll(static e => e.AsProtected()), p.Reads.AsProtected(), p.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       p.Body!.AsProtected(),
       p.Attributes.Clone(), p.SignatureEllipsis?.Clone()
-    );
-    public static LeastPredicate AsProtected(this LeastPredicate p) => new(
+    ));
+    public static LeastPredicate AsProtected(this LeastPredicate p) => WithAdditionalContext(p, () => new LeastPredicate(
       p.Origin.Clone(),
       p.NameNode.Clone(),
       p.HasStaticKeyword, p.IsOpaque,
@@ -594,7 +619,7 @@ namespace DafnyCore.IncrementalCompilation {
       p.Req.ConvertAll(static e => e.AsProtected()), p.Reads.AsProtected(), p.Ens.ConvertAll(static e => e.AsProtected(AEKind.Ensures)),
       p.Body!.AsProtected(),
       p.Attributes.Clone()!, p.SignatureEllipsis?.Clone()!
-    );
+    ));
     #endregion
     public static void Protect(this LiteralModuleDecl decl) {
       decl.ModuleDef.DefaultClass!.Protect();

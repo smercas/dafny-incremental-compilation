@@ -68,10 +68,10 @@ namespace Microsoft.Dafny.IncrementalCompilation {
     }
 
     // TODO: change to property when updating to C#14
-    public static IncCompModifications? Modification(this DafnyOptions dafnyOptions) =>
-    (dafnyOptions.Get(DafnyLangSymbolResolver.CachingType) as DafnyLangSymbolResolver.CachingMode.Incremental)!.Modification;
-    public static void Modification(this DafnyOptions dafnyOptions, IncCompModifications? modification) =>
-      dafnyOptions.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(modification));
+    public static IncCompModifications? Modification(this DafnyOptions dafnyOptions) => null; // TODO: port to new change interface
+    //(dafnyOptions.Get(DafnyLangSymbolResolver.CachingType) as DafnyLangSymbolResolver.CachingMode.Incremental)!.modifications;
+    public static void Modification(this DafnyOptions dafnyOptions, IncCompModifications? modification) { }
+    //dafnyOptions.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(modification));
 
   }
 }

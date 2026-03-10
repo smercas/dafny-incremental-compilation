@@ -8,6 +8,7 @@ using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
@@ -16,6 +17,9 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using DafnyCore.IncrementalCompilation;
+using System.Collections.Immutable;
+using Position = OmniSharp.Extensions.LanguageServer.Protocol.Models.Position;
 
 namespace Microsoft.Dafny;
 
@@ -65,7 +69,10 @@ public static class VerifyCommand {
     if (options.Get(CommonOptionBag.VerificationCoverageReport) != null) {
       options.TrackVerificationCoverage = true;
     }
-    options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(null)); // value doesn't matter
+    void WriteChanges(IEnumerable<(string?, string?)> changes) {
+      options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(changes));
+    }
+    WriteChanges([]);
     var compilation = CliCompilation.Create(options);
     compilation.Start();
 
@@ -84,8 +91,6 @@ public static class VerifyCommand {
 
       //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();
 
-      string lemmaName = null!;
-      Lemma firstLemma = null!;
       async Task Write(string message) {
         await using var trailer = options.OutputWriter.StatusWriter();
         await trailer.WriteAsync(message);
@@ -94,56 +99,65 @@ public static class VerifyCommand {
         await using var trailer = options.OutputWriter.StatusWriter();
         await trailer.WriteLineAsync(message);
       }
-      async Task<Lemma> getLemmaFrom(CliCompilation compilation) => (await compilation.Resolution)!
-        //.CanVerifies![(await compilation.Compilation.RootFiles).First(f => f.BaseName is fileBaseName).Uri]
-        .CanVerifies!.Values.SelectMany(v => v.Values).OfType<Lemma>()
-        .First(l => l is { Body: not null, } && l.Name == $"_IPM_{lemmaName}");
-      while (true) {
+      int AbsPositionFrom(IEnumerable<string> split, Position pos) => split.Take(pos.Line - 1).Sum(s => s.Length) + pos.Character - 1;
+      IEnumerable<(string?, string?)> ParseChanges(IEnumerable<string> ss) {
+        var withoutNull = new SortedDictionary<int, Dictionary<string, string?>>();
+        const string pattern = @"^(?<entryPoint>0|[1-9]\d*)(?<kind>wf|ph): (?<text>.*)$";
+        foreach (var s in ss) {
+          var match = Regex.Match(s, pattern);
 
-        await Write("Enter Lemma you wish to work on (or type `:q` to exit): ");
-        lemmaName = (await options.Input.ReadLineAsync())!;
-        if (lemmaName is null or ":q") { return await compilation.GetAndReportExitCode(); }
-        try {
-          firstLemma = await getLemmaFrom(compilation);
-          break;
-        } catch (InvalidOperationException ex) {
-          if (ex.Message is "Sequence contains no matching element") {
-            await WriteLine($"No lemma named `{lemmaName}` exists in the current program");
-          } else {
-            await WriteLine($"Error: {ex.Message}");
+          if (!match.Success) {
+            throw new ArgumentException($"{s} couldn't be matched with {pattern}");
           }
-        } catch (Exception ex) {
-          await WriteLine($"Error: {ex.Message}");
+          withoutNull.GetOrCreate(int.Parse(match.Groups["entryPoint"].Value), () => [])[match.Groups["kind"].Value] = match.Groups["text"].Value;
+        }
+        var curr = 0;
+        foreach (var (idx, inner) in withoutNull) {
+          while (curr < idx) {
+            yield return (null, null);
+            curr += 1;
+          }
+          yield return (inner.GetValueOrDefault("wf", null), inner.GetValueOrDefault("ph", null));
         }
       }
-      var (startToken, endToken) = (firstLemma.StartToken, firstLemma.EndToken);
-      void writeCachingType(CliCompilation compilation, IncCompModifications? modification) {
-        options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(modification));
+      async Task<List<string>?> ReadChanges() {
+        List<string> modifications = [];
+        while (true) {
+          await Write("Enter modification (or type `:q` to exit, send an empty line to finish inputting modifications): ");
+          var modification = (await options.Input.ReadLineAsync())!;
+          if (modification is null or ":q") { return null; }
+          if (modification is "") { return modifications; }
+          modifications.Add(modification);
+        }
       }
-      int absPositionFrom(IEnumerable<string> split, Token tok) => split.Take(tok.line - 1).Sum(s => s.Length) + tok.col - 1;
-      writeCachingType(compilation, new AppendStatementToMethod(firstLemma));
       while (true) {
-        await Write("Enter modification (or type `:q` to exit): ");
-        var modification = (await options.Input.ReadLineAsync())!;
-        if (modification is null or ":q") { break; }
+        var modifications = await ReadChanges();
+        if (modifications is null) { break; }
+        var parsed = ParseChanges(modifications);
+        WriteChanges(parsed);
+        ProtectToProveApplySuffix.ChangeTexts = parsed;
         compilation = CliCompilation.Create(options, compilation);
         compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
-          var file = files.First(f => startToken.Uri == f.Uri);
-          var contents = file.GetContent().Reader.ReadToEnd();
-          var endOfBody = absPositionFrom(contents.SplitIntoLinesAndKeepLineEndings(), endToken); // position just before `}` character that closes the method body
-          contents = contents.Insert(endOfBody, $"{(contents[endOfBody - 1] == ' ' ? "" : " ")}{modification}");
-          //string expressionToAssert = "1 == 1";
-          //string expressionToAssert = DafnyCore.IncrementalCompilation.ProtectorFunctions.WrappedWith(new LiteralExpr(SourceOrigin.NoToken, true), DafnyCore.IncrementalCompilation.ProtectorFunctions.Protect).ToString();
-          file.GetContent = () => {
-            return new FileSnapshot(new StringReader(contents), null);
-          };
+          var changesPerFile = ProtectToProveApplySuffix.ChangesFlattened
+                                .Where(c => !c.IsEmptyChange)
+                                .GroupBy(c => files.First(file => file.Uri == c.Uri))
+                                .Select(g => (g.Key, g.ToImmutableSortedSet(Change.Comparer)));
+          foreach (var (file, changes) in changesPerFile) {
+            var contents = file.GetContent().Reader.ReadToEnd();
+            foreach (var change in changes.Reverse()) {
+              List<string> split = [.. contents.SplitIntoLinesAndKeepLineEndings()];
+              var (start, end) = (AbsPositionFrom(split, change.Range.Start), AbsPositionFrom(split, change.Range.End));
+              contents = contents[..start] + change.Text + contents[end..];
+            }
+            file.GetContent = () => {
+              return new FileSnapshot(new StringReader(contents), null);
+            };
+          }
         }); //normally this would be replaced by actually getting the file modified
         compilation.Start();
         resolution = await compilation.Resolution;
 
         if (resolution is { HasErrors: false }) {
-          writeCachingType(compilation, new AppendStatementToMethod(await getLemmaFrom(compilation)));
-
           verificationResults = new();
 
           Console.ResetColor();
@@ -155,10 +169,6 @@ public static class VerifyCommand {
           await verificationSummarized;
           await verificationResultsLogged;
           await proofDependenciesReported;
-          var bplFile = DafnyMain.BoogieProgramSuffix(options.PrintFile, firstLemma.SanitizedName);
-          await using (var trailer = options.OutputWriter.StatusWriter()) {
-            await trailer.WriteLineAsync($"{new FileInfo(bplFile).Length} | {File.ReadAllBytes(bplFile).Length}");
-          }
           //new Printer(options.BaseOutputWriter, options).PrintProgram(resolution.ResolvedProgram, true);
         }
         //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();

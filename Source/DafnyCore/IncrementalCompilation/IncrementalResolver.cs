@@ -1,9 +1,12 @@
 ﻿#nullable enable
+using Dafny;
 using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Text;
@@ -74,7 +77,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
       rewriter.PreResolve(Program);
     }
 
-    ResolveSortedDecls(moduleDeclarationPointers, cancellationToken);
+    ResolveSortedDecls(moduleDeclarationPointers, Cache.SortedDecls, cancellationToken);
 
     if (Reporter.ErrorCount != startingErrorCount) {
       onError();
@@ -92,7 +95,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     }
     return Task.CompletedTask;
   }
-  protected void AddProtectorsModule() {
+  private void AddProtectorsModule() {
     var def = new ModuleDefinition(SourceOrigin.NoToken, new(ProtectorFunctions.ContainingModuleName), [], ModuleKindEnum.Concrete, null, Program.DefaultModuleDef, null, []);
     var decl = new LiteralModuleDecl(Options, def, Program.DefaultModuleDef, Guid.NewGuid());
     def.DefaultClass!.Members.AddRange(ProtectorFunctions.All.Select(pf => pf.Function));
@@ -103,7 +106,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     Program.DefaultModuleDef.SourceDecls.Insert(0, decl);
   }
   protected abstract void ResolveSystemModule();
-  protected abstract void ResolveSortedDecls(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, CancellationToken cancellationToken);
+  protected abstract void ResolveSortedDecls(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, IEnumerable<ModuleDecl> sortedDecls, CancellationToken cancellationToken);
   protected new void ProcessDeclarationResolutionResult(
     Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers,
     ModuleDecl decl,
@@ -113,6 +116,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     base.ProcessDeclarationResolutionResult(moduleDeclarationPointers, decl, moduleResolutionResult);
   }
   protected ModuleResolutionResult ResolveModuleDeclaration(ModuleDecl curr) => ResolveModuleDeclaration(Program.Compilation, curr);
+  protected ModuleResolutionResult ResolveModuleDeclaration(ModuleDecl curr, ModuleDecl prev) => new ModuleResolver(this, curr.Options).ResolveModuleDeclaration(Program.Compilation, curr/*, prev*/);
 }
 
 // a lot of copy paste from the original ProgramResolver, will be fixed later
@@ -126,8 +130,8 @@ public class InitialIncrementalResolver(Program program) : IncrementalResolver(p
       SystemClassMembers = base.ResolveSystemModule(Program),
     };
   }
-  protected override void ResolveSortedDecls(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, CancellationToken cancellationToken) {
-    foreach (var decl in Cache.SortedDecls) {
+  protected override void ResolveSortedDecls(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, IEnumerable<ModuleDecl> sortedDecls, CancellationToken cancellationToken) {
+    foreach (var decl in sortedDecls) {
       cancellationToken.ThrowIfCancellationRequested();
       var moduleResolutionResult = ResolveModuleDeclaration(decl);
       ProcessDeclarationResolutionResult(moduleDeclarationPointers, decl, moduleResolutionResult);
@@ -135,15 +139,12 @@ public class InitialIncrementalResolver(Program program) : IncrementalResolver(p
   }
 }
 
-public class SubsequentIncrementalResolver(Program program, ResolutionCache prevCache, IncCompModifications? modification) : IncrementalResolver(program) {
+public class SubsequentIncrementalResolver(Program program, ResolutionCache prevCache) : IncrementalResolver(program) {
   public override ResolutionCache Cache { get; protected set; } = new ResolutionCache();
   public ResolutionCache PrevCache { get; private init; } = prevCache;
-  public IncCompModifications? Modification { get; private init; } = modification;
 
   #region Secondary Constructors
-  public SubsequentIncrementalResolver(
-    Program program, IncrementalResolver prevIncResolver, IncCompModifications? modification
-  ) : this(program, prevIncResolver.Cache, modification) { }
+  public SubsequentIncrementalResolver(Program program, IncrementalResolver prevIncResolver) : this(program, prevIncResolver.Cache) { }
   #endregion
 
   protected override void onError() => Cache = PrevCache;
@@ -154,20 +155,32 @@ public class SubsequentIncrementalResolver(Program program, ResolutionCache prev
     };
     Program.SystemModuleManager = PrevCache.SystemModuleManager;
   }
-  protected override void ResolveSortedDecls(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, CancellationToken cancellationToken) {
-    Contract.Requires(Cache.SortedDecls.Count() == PrevCache.SortedDecls.Count());
+  protected override void ResolveSortedDecls(Dictionary<ModuleDecl, Action<ModuleDecl>> moduleDeclarationPointers, IEnumerable<ModuleDecl> sortedDecls, CancellationToken cancellationToken) {
+    Contract.Requires(sortedDecls.Count() == PrevCache.SortedDecls.Count());
     // req clause for memberwise equality / equivalence, not `FullDafnyName` equality
-    Contract.Requires(Contract.ForAll(Cache.SortedDecls.Zip(PrevCache.SortedDecls), pair => { var (c, p) = pair; return c.FullDafnyName == p.FullDafnyName; }));
-    if (Modification is not ModificationToModuleDeclaration { AffectedModuleDecl: var amd } mtmd) {
-      // for now, as a default case, if module doesn't affect a moduleDecl, we do resolution normally
+    Contract.Requires(Contract.ForAll(sortedDecls.Zip(PrevCache.SortedDecls), pair => { var (c, p) = pair; return c.FullDafnyName == p.FullDafnyName; }));
+
+    if (ProtectToProveApplySuffix.ChangesFlattened.All(c => c.IsEmptyChange)) {
+      // as a default case, if no changes, we do resolution normally
       // this branch is equivalent to `InitialIncrementalResolver.ResolveSortedDecls`
-      foreach (var decl in Cache.SortedDecls) {
+      foreach (var decl in sortedDecls) {
         cancellationToken.ThrowIfCancellationRequested();
         var moduleResolutionResult = ResolveModuleDeclaration(decl);
         ProcessDeclarationResolutionResult(moduleDeclarationPointers, decl, moduleResolutionResult);
       }
       return;
     }
+
+    IEnumerable<ModuleDecl> RecursiveDependantsOf(ModuleDecl m) {
+      Contract.Requires(dependencies.FindVertex(m) is not null);
+      var v = dependencies.FindVertex(m);
+      var immediatePredecessors = dependencies.GetVertices().SelectWhere(ppv => (ppv.Successors.Contains(v), ppv.N));
+      foreach (var pred in immediatePredecessors) {
+        yield return pred;
+        foreach (var trans in RecursiveDependantsOf(pred)) { yield return trans; }
+      }
+    }
+    var dependants = ProtectToProveApplySuffix.ChangedModules.SelectMany(RecursiveDependantsOf).ToImmutableHashSet();
 
     void GenericResolution((ModuleDecl, ModuleDecl) decls, Func<ModuleDecl, ModuleDecl, ModuleResolutionResult> resolve) {
       var (curr, prev) = decls;
@@ -179,31 +192,24 @@ public class SubsequentIncrementalResolver(Program program, ResolutionCache prev
 
     void UseCache((ModuleDecl, ModuleDecl) decls) => GenericResolution(decls, (curr, prev) => PrevCache.ModuleDeclResolutionResults[prev]);
 
-    bool IsAffectedModuleDecl((ModuleDecl _, ModuleDecl Prev) decls) => ReferenceEquals(amd.Old, decls.Prev);
+    bool IsAffectedModuleDecl((ModuleDecl Curr, ModuleDecl _) decls) => ProtectToProveApplySuffix.ChangedModules.Contains(decls.Curr);
 
-    FrozenSet<ModuleDecl>? dependants = null;
-    void ResolveAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) => GenericResolution(decls, (curr, prev) => {
-      amd.NewlyProcessed = curr;
-      dependants = RecursiveDependantsOf(amd.NewlyProcessed).ToFrozenSet();
-      return new ModuleResolver(this, curr.Options).ResolveModuleDeclaration(Program.Compilation, curr/*, prev*/);
-    });
-    IEnumerable<ModuleDecl> RecursiveDependantsOf(ModuleDecl m) {
-      Contract.Requires(dependencies.FindVertex(m) is not null);
-      var v = dependencies.FindVertex(m);
-      var immediatePredecessors = dependencies.GetVertices().SelectWhere(ppv => (ppv.Successors.Contains(v), ppv.N));
-      foreach (var pred in immediatePredecessors) {
-        yield return pred;
-        foreach (var trans in RecursiveDependantsOf(pred)) { yield return trans; }
-      }
-    }
-    void ResolveAfterAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) =>
-      GenericResolution(decls, (curr, prev) => dependants!.Contains(curr) switch {
-        true => ResolveModuleDeclaration(curr), // this `ModuleDecl` depends (directly or indirectly) on the modified one, so we have to resolve it normally
-        false => PrevCache.ModuleDeclResolutionResults[prev], // this `ModuleDecl` is unaffected, so we can use the previous resolution result
+    void ResolveFirstAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) => GenericResolution(decls, ResolveModuleDeclaration);
+
+    void ResolveAfterFirstAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) =>
+      GenericResolution(decls, (curr, prev) => dependants.Contains(curr) switch {
+        true => IsAffectedModuleDecl(decls) switch {
+          // this `ModuleDecl` is a modified `ModuleDecl`, for now it's resolved normally but could be resolved with reused data in the future
+          true => ResolveModuleDeclaration(curr, prev),
+          // this `ModuleDecl` depends on a modified `ModuleDecl`, so we have to resolve it normally
+          false => ResolveModuleDeclaration(curr),
+        },
+        // this `ModuleDecl` is unaffected, so we can use the previous resolution result
+        false => PrevCache.ModuleDeclResolutionResults[prev],
       });
 
-    Cache.SortedDecls.Zip(PrevCache.SortedDecls).ForEachInPhases(
-      UseCache, (IsAffectedModuleDecl, ResolveAffectedModuleDecl, ResolveAfterAffectedModuleDecl)
+    sortedDecls.Zip(PrevCache.SortedDecls).ForEachInPhases(
+      UseCache, (IsAffectedModuleDecl, ResolveFirstAffectedModuleDecl, ResolveAfterFirstAffectedModuleDecl)
     );
   }
 }

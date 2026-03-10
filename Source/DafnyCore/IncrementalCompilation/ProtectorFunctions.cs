@@ -7,13 +7,14 @@ using System.Threading.Tasks;
 using System.Diagnostics;
 using Microsoft.Dafny;
 using System.Numerics;
+using static DafnyCore.IncrementalCompilation.ProtectToProveApplySuffix;
 
 namespace DafnyCore.IncrementalCompilation;
 public static class ProtectorFunctions {
   static ProtectorFunctions() {
     Protect = new("_protect", null!); Protect = Protect with { Function = protectFunction(), };
     ProtectScope = new("_protectScope", null!); ProtectScope = ProtectScope with { Function = protectScopeFunction(), };
-    ProtectToProve = new("_protectToProve", null!); ProtectToProve = ProtectToProve with { Function = protectToProveFunction(), };
+    ProtectToProve = new("_protectToProve", null!, null!); ProtectToProve = ProtectToProve with { Function = protectToProveFunction(), };
     ProtectToProveImmediate = new("_protectToProveImmediate", null!, BigInteger.Zero); ProtectToProveImmediate = ProtectToProveImmediate with { Function = protectToProveImmediateFunction(), };
     All = [Protect, ProtectScope, ProtectToProve, ProtectToProveImmediate];
   }
@@ -75,8 +76,8 @@ public static class ProtectorFunctions {
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, expression.ToString(), false)),
       ], Token.NoToken);
     }
-    if (ReferenceEquals(protectorFunction, ProtectToProve)) {
-      return new ProtectToProveApplySuffix(expression);
+    if (protectorFunction is ProtectorFunction.WithContext { ChangeContext: var changeContext }) {
+      return new ProtectToProveApplySuffix(expression, changeContext);
     }
     if (protectorFunction is ProtectorFunction.WithEntryPoint { EntryPoint: var entryPoint }) {
       return new ProtectToProveApplySuffix(expression, entryPoint);
@@ -95,14 +96,15 @@ public static class ProtectorFunctions {
 
   public record ProtectorFunction(string Name, Function Function) {
     public sealed record WithEntryPoint(string Name, Function Function, BigInteger EntryPoint) : ProtectorFunction(Name, Function);
+    public sealed record WithContext(string Name, Function Function, ChangeContext ChangeContext) : ProtectorFunction(Name, Function);
   }
 
-  public static readonly ProtectorFunction Protect;
-  public static readonly ProtectorFunction ProtectScope;
-  public static readonly ProtectorFunction ProtectToProve;
-  public static readonly ProtectorFunction.WithEntryPoint ProtectToProveImmediate;
-  public static readonly ICollection<ProtectorFunction> All;
-  public static readonly string ContainingModuleName = "_protectors";
+  public static ProtectorFunction Protect { get; }
+  public static ProtectorFunction ProtectScope { get; }
+  public static ProtectorFunction.WithContext ProtectToProve { get; }
+  public static ProtectorFunction.WithEntryPoint ProtectToProveImmediate { get; }
+  public static ICollection<ProtectorFunction> All { get; }
+  public static string ContainingModuleName { get; } = "_protectors";
 
   private static Function ProtectorFunctionBase(List<TypeParameter> typeArgs, string name, (List<Formal> args, Microsoft.Dafny.Type result) signature, Expression body) => new(
     origin: new Token(),
@@ -169,6 +171,5 @@ public static class ProtectorFunctions {
   private static Microsoft.Dafny.Type ToType(this TypeParameter tp) => new UserDefinedType(tp);
 
   private static NameSegment ToNameSegment(this string name) => new(SourceOrigin.NoToken, name, null);
-  private static Name ToName(this string name) => new(name);
-  public static ExprDotName ToExprDotName(this ProtectorFunction pf) => new(SourceOrigin.NoToken, ContainingModuleName.ToNameSegment(), pf.Name.ToName(), null);
+  public static ExprDotName ToExprDotName(this ProtectorFunction pf) => new(SourceOrigin.NoToken, ContainingModuleName.ToNameSegment(), pf.Name.ToNameNodeWithVirtualToken(), null);
 }

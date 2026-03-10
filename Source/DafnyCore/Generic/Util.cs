@@ -144,7 +144,7 @@ namespace Microsoft.Dafny {
       // `enumerator` is at the first element of `es`
       IEnumerable<(Predicate<T>, Action<T>)> phaseSepsarators =
         [.. post.Select(p => (p.when, p.on)), (static _ => false, static _ => throw new UnreachableException())];
-      foreach (var ((when, on), action) in phaseSepsarators.Zip([pre, .. post.Select(p => p.after)])) {
+      foreach (var ((when, on), action) in phaseSepsarators.Zip([pre, .. post.Select(static p => p.after)])) {
         while (!when(enumerator.Current)) {
           action(enumerator.Current);
           if (!enumerator.MoveNext()) {
@@ -162,6 +162,21 @@ namespace Microsoft.Dafny {
         l[i] = transformer(l[i]);
       }
       return l;
+    }
+    public static IEnumerable<T> ExtendWith<T>(this IEnumerable<T> es, Func<T> extensionProducer) => es.ExtendWithBase(i => extensionProducer(), null);
+    public static IEnumerable<T> ExtendWith<T>(this IEnumerable<T> es, Func<int, T> extensionProducer) => es.ExtendWithBase(extensionProducer, null);
+    public static IEnumerable<T> ExtendWith<T>(this IEnumerable<T> es, Func<T> extensionProducer, int newLength) => es.ExtendWithBase(i => extensionProducer(), newLength);
+    public static IEnumerable<T> ExtendWith<T>(this IEnumerable<T> es, Func<int, T> extensionProducer, int newLength) => es.ExtendWithBase(extensionProducer, newLength);
+    private static IEnumerable<T> ExtendWithBase<T>(this IEnumerable<T> es, Func<int, T> extensionProducer, int? newLength) {
+      int currentLength = 0;
+      foreach (var e in es) {
+        yield return e;
+        currentLength += 1;
+      }
+      while (newLength is null || currentLength < newLength) {
+        yield return extensionProducer(currentLength);
+        currentLength += 1;
+      }
     }
 #nullable disable
 

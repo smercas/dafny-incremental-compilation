@@ -8,6 +8,8 @@ using System.Diagnostics.Contracts;
 using Namotion.Reflection;
 using System.Linq;
 using System.Diagnostics;
+using System.Collections;
+using System.Collections.Generic;
 
 namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
   /// <summary>
@@ -21,7 +23,7 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
     public abstract record CachingMode {
       public sealed record None : CachingMode;
       public sealed record HashBased : CachingMode;
-      public sealed record Incremental(IncCompModifications? Modification) : CachingMode;
+      public sealed record Incremental(IEnumerable<(string?, string?)> modifications) : CachingMode;
       public static CachingMode Default() => new None();
     }
     public static readonly Option<CachingMode> CachingType = new(
@@ -36,7 +38,7 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
         return token.ToLowerInvariant() switch {
           "none" => new CachingMode.None(),
           "hash" => new CachingMode.HashBased(),
-          "incremental" => new CachingMode.Incremental(null),
+          "incremental" => new CachingMode.Incremental([]),
           _ => throw new UnreachableException()
         };
       }
@@ -84,8 +86,8 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
           CachingMode.None => new ProgramResolver(program),
           CachingMode.HashBased => new CachingResolver(program, innerLogger, telemetryPublisher, resolutionCache),
           CachingMode.Incremental when resolver is null => new InitialIncrementalResolver(program),
-          CachingMode.Incremental(var m) when resolver is IncrementalResolver incrementalResolver =>
-            new SubsequentIncrementalResolver(program, incrementalResolver!, m),
+          CachingMode.Incremental when resolver is IncrementalResolver incrementalResolver =>
+            new SubsequentIncrementalResolver(program, incrementalResolver),
           _ => throw new UnreachableException(),
         };
         await resolver.Resolve(cancellationToken);
