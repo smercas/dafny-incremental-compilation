@@ -118,6 +118,7 @@ public static class VerifyCommand {
             curr += 1;
           }
           yield return (inner.GetValueOrDefault("wf", null), inner.GetValueOrDefault("ph", null));
+          curr += 1;
         }
       }
       async Task<List<string>?> ReadChanges() {
