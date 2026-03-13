@@ -77,7 +77,7 @@ namespace DafnyCore.IncrementalCompilation {
         protected E EnclosingDecl { get; }
         protected ModuleDefinition OriginalModuleDef => EnclosingDecl.EnclosingModuleDefinition;
         protected LiteralModuleDecl OriginalModuleDecl => OriginalModuleDef.EnclosingLiteralModuleDecl!;
-        private LiteralModuleDecl CreateModule(DafnyOptions dafnyOptions, DefaultModuleDefinition root) {
+        private LiteralModuleDecl CreateModule(DafnyOptions dafnyOptions, ModuleDefinition enclosingModule) {
           var trace = Trace(EnclosingDecl);
           var refinement_target_parts = trace.Select(d => d.Name);
           if (EnclosingDecl is not DefaultClassDecl) { refinement_target_parts = refinement_target_parts.Append(EnclosingDecl.Name); }
@@ -87,20 +87,20 @@ namespace DafnyCore.IncrementalCompilation {
             [],
             ModuleKindEnum.Abstract,
             new(ImplementationKind.Refinement, new([.. refinement_target_parts.Select(Microsoft.Dafny.Util.ToNameNodeWithVirtualToken)])),
-            root,
+            enclosingModule,
             null,
             []
           );
-          var decl = new LiteralModuleDecl(dafnyOptions, def, root, Guid.NewGuid());
+          var decl = new LiteralModuleDecl(dafnyOptions, def, enclosingModule, Guid.NewGuid());
           return decl;
         }
         protected abstract void AlterOriginalMemberDecl();
-        protected abstract M CreateDuplicateOfOriginalMemberDecl();
+        protected abstract M CreateDuplicateOfOriginalMemberDecl(TopLevelDecl parent);
         public override TopLevelDecl Process(DafnyOptions dafnyOptions, DefaultModuleDefinition root) {
           var new_decl = CreateModule(dafnyOptions, root);
           switch (EnclosingDecl) {
             case DefaultClassDecl:
-              var new_member = CreateDuplicateOfOriginalMemberDecl();
+              var new_member = CreateDuplicateOfOriginalMemberDecl(new_decl.ModuleDef.DefaultClass!);
               new_member.NameNode = $"{Name}_{new_member.NameNode}".ToNameNodeWithVirtualToken();
               new_decl.ModuleDef.DefaultClass!.Members.Add(new_member);
               AlterOriginalMemberDecl();
@@ -111,13 +111,18 @@ namespace DafnyCore.IncrementalCompilation {
         }
       }
       public class FromConstantField<E>(E enclosingDecl, ConstantField constantField) : FromMemberDecl<E, ConstantField>(enclosingDecl, constantField) where E : TopLevelDeclWithMembers {
-        protected override ConstantField CreateDuplicateOfOriginalMemberDecl() => throw new NotImplementedException();
+        protected override ConstantField CreateDuplicateOfOriginalMemberDecl(TopLevelDecl enclosingClass) => throw new NotImplementedException();
         protected override void AlterOriginalMemberDecl() => throw new NotImplementedException();
       }
       public class FromMethodOrFunction<E>(E enclosingDecl, MethodOrFunction methodOrFunction, IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> attrInContract, IReadOnlySet<AttributesAccessor> attrInBody) : FromMemberDecl<E, MethodOrFunction>(enclosingDecl, methodOrFunction) where E : TopLevelDeclWithMembers {
         private IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> AttrInContract { get; } = attrInContract;
         private IReadOnlySet<AttributesAccessor> AttrInBody { get; } = attrInBody;
-        protected override MethodOrFunction CreateDuplicateOfOriginalMemberDecl() => MemberDecl.AsProtected();
+        protected override MethodOrFunction CreateDuplicateOfOriginalMemberDecl(TopLevelDecl enclosingClass) {
+          var r = MemberDecl.AsProtected();
+          r.EnclosingClass = enclosingClass;
+          return r;
+        }
+
         protected override void AlterOriginalMemberDecl() {
           foreach (var acc in Microsoft.Dafny.Util.Concat(AttrInContract.Values.SelectMany(v => v), AttrInBody)) {
             (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, AttributeName);

@@ -197,15 +197,10 @@ public class SubsequentIncrementalResolver(Program program, ResolutionCache prev
     void ResolveFirstAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) => GenericResolution(decls, ResolveModuleDeclaration);
 
     void ResolveAfterFirstAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) =>
-      GenericResolution(decls, (curr, prev) => dependants.Contains(curr) switch {
-        true => IsAffectedModuleDecl(decls) switch {
-          // this `ModuleDecl` is a modified `ModuleDecl`, for now it's resolved normally but could be resolved with reused data in the future
-          true => ResolveModuleDeclaration(curr, prev),
-          // this `ModuleDecl` depends on a modified `ModuleDecl`, so we have to resolve it normally
-          false => ResolveModuleDeclaration(curr),
-        },
-        // this `ModuleDecl` is unaffected, so we can use the previous resolution result
-        false => PrevCache.ModuleDeclResolutionResults[prev],
+      GenericResolution(decls, (curr, prev) => {
+        if (IsAffectedModuleDecl(decls)) { return ResolveModuleDeclaration(curr, prev); }
+        if (dependants.Contains(curr)) { return ResolveModuleDeclaration(curr); }
+        return PrevCache.ModuleDeclResolutionResults[prev];
       });
 
     sortedDecls.Zip(PrevCache.SortedDecls).ForEachInPhases(

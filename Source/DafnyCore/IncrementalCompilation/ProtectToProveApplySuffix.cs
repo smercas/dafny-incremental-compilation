@@ -28,7 +28,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static void AssignEntryPoints() {
       foreach (var (instance, idx) in instances.Indexed()) {
         instance.Bindings.ArgumentBindings.First(ab => ReferenceEquals(ab.Actual, PlaceholderId)).Actual = new LiteralExpr(SourceOrigin.NoToken, new BigInteger(idx));
-        var (memberDecl, attributeBearingDeclaration) = ChangeContexts[instance];
+        var (memberDecl, attributeBearingDeclaration) = ChangeContexts[instance].Evaluated;
         switch (Changes[idx].WF, attributeBearingDeclaration) {
           case (AssertWFChange assertWFChange, [AssertStmt assertStmt, ..]):
             assertWFChange.Update(memberDecl, assertStmt);
@@ -60,12 +60,14 @@ namespace DafnyCore.IncrementalCompilation {
     public static IReadOnlySet<ProtectToProveApplySuffix> Instances => instances;
 
 
-    public sealed record ChangeContext(MemberDecl MemberDecl, IReadOnlyList<IAttributeBearingDeclaration> AttributeBearingDeclarations) {
-      public ChangeContext((MemberDecl, Stack<IAttributeBearingDeclaration>) ctx) : this(ctx.Item1, [.. ctx.Item2]) { }
+    public sealed record ChangeContext(Lazy<MemberDecl> MemberDecl, IReadOnlyList<Lazy<IAttributeBearingDeclaration>> AttributeBearingDeclarations) {
+      public ChangeContext((Lazy<MemberDecl>, Stack<Lazy<IAttributeBearingDeclaration>>) ctx) : this(ctx.Item1, [.. ctx.Item2]) { }
+      public (MemberDecl MemberDecl, IReadOnlyList<IAttributeBearingDeclaration> AttributeBearingDeclarations) Evaluated =>
+        (MemberDecl.Value, AttributeBearingDeclarations.ConvertAll(static abd => abd.Value));
     }
     private static Dictionary<ProtectToProveApplySuffix, ChangeContext> ChangeContexts { get; set; } = [];
     // these change objects can be computed once and updated with relevant information
-    private static Lazy<List<(Change<WF>, Change<ProofHint>)>> changes { get; set; } = new(() => [..Instances.Select(i => ChangeContexts[i]).Select(cc => (
+    private static Lazy<List<(Change<WF>, Change<ProofHint>)>> changes { get; set; } = new(() => [..Instances.Select(i => ChangeContexts[i].Evaluated).Select(cc => (
       cc.AttributeBearingDeclarations switch {
         [AssertStmt assertStmt, ..] => new AssertWFChange(cc.MemberDecl, assertStmt) as Change<WF>,
         [AttributedExpression attributedExpression, ..] => new EnsuresWFChange(cc.MemberDecl, attributedExpression),
@@ -82,7 +84,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static IEnumerable<(string?, string?)> ChangeTexts {
       set {
         var changedModulesNeedToBeReset = false;
-        foreach (var (changePair, (WFText, ProofHintText)) in Changes.Zip(value)) {
+        foreach (var (changePair, (WFText, ProofHintText)) in Changes.Zip(value.ExtendWith(() => (null, null)))) {
           var prev = (changePair.WF.IsEmptyChange, changePair.ProofHint.IsEmptyChange);
           changePair.WF.Text = WFText;
           changePair.ProofHint.Text = ProofHintText;
