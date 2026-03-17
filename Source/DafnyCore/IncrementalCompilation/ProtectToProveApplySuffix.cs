@@ -111,9 +111,8 @@ namespace DafnyCore.IncrementalCompilation {
     public ProtectToProveApplySuffix(Cloner cloner, ProtectToProveApplySuffix original) : base(cloner, original) {
       throw new UnreachableException("not sure if it can be reached, I sincerely hope it can't");
     }
-    ProtectToProveApplySuffix ICloneable<ProtectToProveApplySuffix>.Clone(Cloner cloner) => new(cloner, this);
+    public new ProtectToProveApplySuffix Clone(Cloner cloner) => new(cloner, this);
 
-    [SyntaxConstructor]
     public ProtectToProveApplySuffix(Expression e, ChangeContext changeContext) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
         new(null, e.AsProtected()),
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),

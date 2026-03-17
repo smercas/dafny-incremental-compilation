@@ -16,8 +16,19 @@ namespace DafnyCore.IncrementalCompilation {
     #region protection context
     private static AsyncLocal<Stack<(Lazy<MemberDecl>, Stack<Lazy<IAttributeBearingDeclaration>>)>> AsyncLocalContext { get; } = new();
     private static Stack<(Lazy<MemberDecl>, Stack<Lazy<IAttributeBearingDeclaration>>)> Context => AsyncLocalContext.Value ??= new();
+    private static AsyncLocal<bool> AsyncLocalProtectLhsInContainsBinaryExpressions { get; } = new() { Value = true };
+    private static bool ProtectLhsInContainsBinaryExpressions {
+      get => AsyncLocalProtectLhsInContainsBinaryExpressions.Value;
+      set => AsyncLocalProtectLhsInContainsBinaryExpressions.Value = value;
+    }
+    public static T WithProtectionOnIdentifierExpressionsInContainsBinaryExpressionsDisabled<T>(Func<T> f) {
+      (var old, ProtectLhsInContainsBinaryExpressions) = (ProtectLhsInContainsBinaryExpressions, false);
+      var r = f();
+      ProtectLhsInContainsBinaryExpressions = old;
+      return r;
+    }
     private class Box<T> {
-      public T? Value { get; set; } = default(T);
+      public T? Value { get; set; } = default;
     }
     public static T WithMemberAdditionalContext<T>(Func<T> f) where T : MemberDecl {
       var r = new Box<T>();
@@ -140,6 +151,29 @@ namespace DafnyCore.IncrementalCompilation {
     };
 
     public static GuardedAlternative AsProtected(this GuardedAlternative a) => new(a.Origin.Clone(), a.IsBindingGuard, a.Guard.AsProtected(), a.Body.ConvertAll(AsProtected), a.Attributes.Clone());
+
+    public static Expression AsProtectedFiniteSetOrMapComprehensionRange(this Expression range) {
+      if (range is BinaryExpr { Op: BinaryExpr.Opcode.And } binaryExpr) {
+        // domain
+        switch (binaryExpr.E1) {
+          case BinaryExpr { Op: BinaryExpr.Opcode.In, E0: IdentifierExpr, E1.Origin: QuantifiedVariableDomainOrigin } when ReferenceEquals(binaryExpr.Origin, binaryExpr.E1.Origin):
+            // custom cloner?
+            return binaryExpr.Clone();
+          case { Origin: QuantifiedVariableRangeOrigin } when ReferenceEquals(binaryExpr.Origin, binaryExpr.E1.Origin.Center):
+            // protect normally?
+            return binaryExpr.Clone();
+          default: throw new UnreachableException();
+        }
+        {
+          return new BinaryExpr(range.Origin, BinaryExpr.Opcode.And,
+            binaryExpr.E0.AsProtectedFiniteSetOrMapComprehensionRange(),
+            WithProtectionOnIdentifierExpressionsInContainsBinaryExpressionsDisabled(() => binaryExpr.E1.AsProtected())
+          );
+        }
+      }
+      return range.Clone();
+      //return WithProtectionOnIdentifierExpressionsInContainsBinaryExpressionsDisabled(() => range.AsProtected());
+    }
 
     #endregion
 
@@ -403,6 +437,7 @@ namespace DafnyCore.IncrementalCompilation {
         StaticReceiverExpr pp => throw pp.CannotAppearBeforeResolution(),
         CharLiteralExpr pp => pp.AsProtected(),
         StringLiteralExpr pp => pp.AsProtected(),
+        DecimalLiteralExpr pp => pp.AsProtected(),
         _ when p.IsExactly() => p.AsProtected(),
         _ => throw new UnreachableException(),
       },
@@ -424,8 +459,8 @@ namespace DafnyCore.IncrementalCompilation {
     public static SeqConstructionExpr AsProtected(this SeqConstructionExpr e) => new(e.Origin.Clone(), e.ExplicitElementType.Clone(), e.N.AsProtected(), e.Initializer.AsProtected());
     public static SeqUpdateExpr AsProtected(this SeqUpdateExpr e) => new(e.Origin.Clone(), e.Seq.AsProtected(), e.Index.AsProtected(), e.Value.AsProtected());
     public static LambdaExpr AsProtected(this LambdaExpr e) => new(e.Origin.Clone(), e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected(), e.Reads.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
-    public static MapComprehension AsProtected(this MapComprehension e) => new(e.Origin.Clone(), e.Finite, e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected()!, e.TermLeft?.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
-    public static SetComprehension AsProtected(this SetComprehension e) => new(e.Origin.Clone(), e.Finite, e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected()!, e.Term.AsProtected(), e.Attributes.Clone()) { TermIsImplicit = e.TermIsImplicit };
+    public static MapComprehension AsProtected(this MapComprehension e) => new(e.Origin.Clone(), e.Finite, e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtectedFiniteSetOrMapComprehensionRange()!, e.TermLeft?.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
+    public static SetComprehension AsProtected(this SetComprehension e) => new(e.Origin.Clone(), e.Finite, e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtectedFiniteSetOrMapComprehensionRange()!, e.Term.AsProtected(), e.Attributes.Clone()) { TermIsImplicit = e.TermIsImplicit };
     public static ForallExpr AsProtected(this ForallExpr e) => new(e.Origin.Clone(), e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
     public static ExistsExpr AsProtected(this ExistsExpr e) => new(e.Origin.Clone(), e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
     public static ITEExpr AsProtected(this ITEExpr e) => new(e.Origin.Clone(), e.IsBindingGuard, e.Test.AsProtected(), e.Thn.AsProtected(), e.Els.AsProtected());
@@ -436,7 +471,10 @@ namespace DafnyCore.IncrementalCompilation {
     public static OldExpr AsProtected(this OldExpr e) => new(e.Origin.Clone(), e.Expr.AsProtected(), e.At);
     public static UnchangedExpr AsProtected(this UnchangedExpr e) => new(e.Origin.Clone(), e.Frame.ConvertAll(AsProtected), e.At);
     public static WildcardExpr AsProtected(this WildcardExpr e) => new(e.Origin.Clone());
-    public static BinaryExpr AsProtected(this BinaryExpr e) => new(e.Origin.Clone(), e.Op, e.E0.AsProtected(), e.E1.AsProtected());
+    public static BinaryExpr AsProtected(this BinaryExpr e) => new(e.Origin.Clone(), e.Op, (ProtectLhsInContainsBinaryExpressions || e is not { Op: BinaryExpr.Opcode.In, E0: IdentifierExpr or NameSegment }) switch {
+      true => e.E0.AsProtected(),
+      false => e.E0.Clone(),
+    }, e.E1.AsProtected());
     public static DecreasesToExpr AsProtected(this DecreasesToExpr e) => new(e.Origin.Clone(), e.OldExpressions.ConvertAll(AsProtected), e.NewExpressions.ConvertAll(AsProtected), e.AllowNoChange);
     public static UnaryOpExpr AsProtected(this UnaryOpExpr e) {
       Contract.Requires(e.Op is UnaryOpExpr.Opcode.Not or UnaryOpExpr.Opcode.Allocated or UnaryOpExpr.Opcode.Cardinality or UnaryOpExpr.Opcode.Assigned);
@@ -452,7 +490,15 @@ namespace DafnyCore.IncrementalCompilation {
     public static LetExpr AsProtected(this LetExpr e) => new(e.Origin.Clone(), e.LHSs.ConvertAll(AsProtected), e.RHSs.ConvertAll(AsProtected), e.Body.AsProtected(), e.Exact, e.Attributes.Clone());
     public static ApplySuffix AsProtected(this NameSegment e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
     // not sure if anything needs to be done for backtick tokens, you'll find out I guess
-    public static ApplySuffix AsProtected(this ApplySuffix e) => new(e.Origin.Clone(), e.AtTok?.Clone(), e.Lhs.Clone(), e.Bindings.ArgumentBindings.ConvertAll(static ab => new ActualBinding(ab.FormalParameterName?.Clone(), ab.Actual.AsProtected(), ab.IsGhost)), e.CloseParen);
+    // there are both cases in which `Lhs` should be protected and in which it shouldn't be protected
+    // maybe the solution would be deferred protection aka both a clone and a protected clone are made and, during resolution, we see if the protected clone is valid
+    // that would require doing the resolution on multiple versions of an `ApplySuffix` AND changing the way some operations are done on `ApplySuffix` objects
+    // for now, we'll only protect lambda expressions, which seems pretty much harmless
+    //public static ApplySuffix AsProtected(this ApplySuffix e) => new(e.Origin.Clone(), e.AtTok?.Clone(), e.Lhs.AsProtected(), e.Bindings.ArgumentBindings.ConvertAll(static ab => new ActualBinding(ab.FormalParameterName?.Clone(), ab.Actual.AsProtected(), ab.IsGhost)), e.CloseParen);
+    public static ApplySuffix AsProtected(this ApplySuffix e) => new(e.Origin.Clone(), e.AtTok?.Clone(), e.Lhs is ParensExpression { E: LambdaExpr } ? e.Lhs.AsProtected() : e.Lhs.Clone(), new ActualBindings(
+      e.Bindings.ArgumentBindings.ConvertAll(static ab => new ActualBinding(ab.FormalParameterName?.Clone(), ab.Actual.AsProtected(), ab.IsGhost))
+    ), e.CloseParen);
+
     public static ExprDotName AsProtected(this ExprDotName e) => new(e.Origin.Clone(), e.Lhs.AsProtected(), e.SuffixNameNode.Clone(), e.OptTypeArguments?.ConvertAll<Microsoft.Dafny.Type>(Clone));
     public static FieldLocationExpression AsProtected(this FieldLocationExpression e) => new(e.Lhs.AsProtected(), e.Backtick, e.Name.Clone());
     public static IndexFieldLocationExpression AsProtected(this IndexFieldLocationExpression e) => new(e.Lhs.AsProtected(), e.OpenParen, e.Indices.ConvertAll(AsProtected), e.CloseParen);
