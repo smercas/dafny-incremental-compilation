@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -26,4 +27,6 @@ public class PrefixLemma : Method {
   }
 
   public override bool AllowsAllocation => false;
+
+  public override PrefixLemma WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
 }

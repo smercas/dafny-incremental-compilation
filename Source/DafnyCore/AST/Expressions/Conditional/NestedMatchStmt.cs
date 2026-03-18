@@ -1,7 +1,9 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.Dafny;
 
@@ -167,4 +169,11 @@ public class NestedMatchStmt : Statement, ICloneable<NestedMatchStmt>, ICanForma
       ExpressionTester.CheckIsCompilable(resolver, reporter, Source, codeContext);
     }
   }
+
+  protected NestedMatchStmt(Protector protector, NestedMatchStmt original) : base(protector, original) {
+    Source = original.Source.AsProtected();
+    Cases = original.Cases.ConvertAll(c => c.WithProtections(protector));
+    UsesOptionalBraces = original.UsesOptionalBraces;
+  }
+  public override NestedMatchStmt WithProtections(Protector protector) => new(protector, this);
 }

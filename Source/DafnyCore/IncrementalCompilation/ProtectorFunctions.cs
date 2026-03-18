@@ -12,18 +12,35 @@ using static DafnyCore.IncrementalCompilation.ProtectToProveApplySuffix;
 namespace DafnyCore.IncrementalCompilation;
 public static class ProtectorFunctions {
   static ProtectorFunctions() {
-    Protect = new("_protect", null!); Protect = Protect with { Function = protectFunction(), };
+    NewProtect = new("_protect", null!); NewProtect = NewProtect with { Function = protectFunction(), };
+    OldProtect = new("_oldProtect", null!); OldProtect = OldProtect with { Function = oldProtectFunction(), };
     ProtectScope = new("_protectScope", null!); ProtectScope = ProtectScope with { Function = protectScopeFunction(), };
-    ProtectToProve = new("_protectToProve", null!, null!); ProtectToProve = ProtectToProve with { Function = protectToProveFunction(), };
-    ProtectToProveImmediate = new("_protectToProveImmediate", null!, BigInteger.Zero); ProtectToProveImmediate = ProtectToProveImmediate with { Function = protectToProveImmediateFunction(), };
-    All = [Protect, ProtectScope, ProtectToProve, ProtectToProveImmediate];
+    ProtectToProve = new("_protectToProve", null!, null!, null!); ProtectToProve = ProtectToProve with { Function = protectToProveFunction(), };
+    ProtectToProveImmediate = new("_protectToProveImmediate", null!, null!, BigInteger.Zero); ProtectToProveImmediate = ProtectToProveImmediate with { Function = protectToProveImmediateFunction(), };
+    All = [NewProtect, OldProtect, ProtectScope, ProtectToProve, ProtectToProveImmediate];
   }
+
 
   private static Function protectFunction() {
     var typeVar = "T".ToTypeParameter();
+    return ProtectorFunctionBase(
+      typeArgs: [typeVar,],
+      name: NewProtect.Name,
+      signature: ([
+        ("x", typeVar).ToFormal(),
+        ("name", StringType()).ToFormal(),
+      ], new BoolType()),
+      body: new LiteralExpr(
+        origin: SourceOrigin.NoToken,
+        value: true
+      )
+    );
+  }
+  private static Function oldProtectFunction() {
+    var typeVar = "T".ToTypeParameter();
     return IdentityOf(
       typeArgs: [typeVar,],
-      name: Protect.Name,
+      name: OldProtect.Name,
       signature: (
         ("x", typeVar).ToFormal(), [
         ("name", StringType()).ToFormal(),
@@ -70,36 +87,49 @@ public static class ProtectorFunctions {
     );
   }
   public static ApplySuffix WrappedWith(this Expression expression, ProtectorFunction protectorFunction) {
-    if (ReferenceEquals(protectorFunction, Protect)) {
-      return new(expression.Origin, null, Protect.ToExprDotName(), [
+    if (ReferenceEquals(protectorFunction, NewProtect)) {
+      return new(expression.Origin, null, NewProtect.ToExprDotName(), [
         new(null, expression),
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, expression.ToString(), false)),
       ], Token.NoToken);
     }
-    if (protectorFunction is ProtectorFunction.WithContext { ChangeContext: var changeContext }) {
-      return new ProtectToProveApplySuffix(expression, changeContext);
+    if (ReferenceEquals(protectorFunction, OldProtect)) {
+      return new(expression.Origin, null, OldProtect.ToExprDotName(), [
+        new(null, expression),
+        new(null, new StringLiteralExpr(SourceOrigin.NoToken, expression.ToString(), false)),
+      ], Token.NoToken);
     }
-    if (protectorFunction is ProtectorFunction.WithEntryPoint { EntryPoint: var entryPoint }) {
-      return new ProtectToProveApplySuffix(expression, entryPoint);
+    switch (protectorFunction) {
+      case ProtectorFunction.WithContext { Protector: var protector, ChangeContext: var changeContext }:
+        return new ProtectToProveApplySuffix(expression, protector, changeContext);
+      case ProtectorFunction.WithEntryPoint { Protector: var protector, EntryPoint: var entryPoint }:
+        return new ProtectToProveApplySuffix(expression, protector, entryPoint);
     }
-    throw new ArgumentException("\"protectorFunction\" needs to be either `_protect` or `_protectToProve`");
+    throw new ArgumentException("\"protectorFunction\" needs to be either `_protect`, `_protectToProve` or `_protectScope`");
   }
   public static ApplySuffix WrappedWith(this string varname, ProtectorFunction protectorFunction) {
+    if (ReferenceEquals(protectorFunction, NewProtect)) {
+      return new(SourceOrigin.NoToken, null, NewProtect.ToExprDotName(), [
+        new(null, new NameSegment(SourceOrigin.NoToken, varname, null)),
+        new(null, new StringLiteralExpr(SourceOrigin.NoToken, varname, false)),
+      ], Token.NoToken);
+    }
     if (ReferenceEquals(protectorFunction, ProtectScope)) {
       return new(SourceOrigin.NoToken, null, ProtectScope.ToExprDotName(), [
         new(null, new NameSegment(SourceOrigin.NoToken, varname, null)),
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, varname, false)),
       ], Token.NoToken);
     }
-    throw new ArgumentException("\"protectorFunction\" needs to be `_protectScope`");
+    throw new ArgumentException("\"protectorFunction\" needs to be either `_protect`, `_protectScope`");
   }
 
   public record ProtectorFunction(string Name, Function Function) {
-    public sealed record WithEntryPoint(string Name, Function Function, BigInteger EntryPoint) : ProtectorFunction(Name, Function);
-    public sealed record WithContext(string Name, Function Function, ChangeContext ChangeContext) : ProtectorFunction(Name, Function);
+    public sealed record WithEntryPoint(string Name, Function Function, Protector Protector, BigInteger EntryPoint) : ProtectorFunction(Name, Function);
+    public sealed record WithContext(string Name, Function Function, Protector Protector, ChangeContext ChangeContext) : ProtectorFunction(Name, Function);
   }
 
-  public static ProtectorFunction Protect { get; }
+  public static ProtectorFunction NewProtect { get; }
+  public static ProtectorFunction OldProtect { get; }
   public static ProtectorFunction ProtectScope { get; }
   public static ProtectorFunction.WithContext ProtectToProve { get; }
   public static ProtectorFunction.WithEntryPoint ProtectToProveImmediate { get; }

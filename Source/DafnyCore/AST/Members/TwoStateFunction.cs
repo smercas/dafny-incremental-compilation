@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -22,6 +23,10 @@ public class TwoStateFunction : Function {
     Contract.Requires(decreases != null);
   }
   public override bool ReadsHeap { get { return true; } }
+
+  protected TwoStateFunction(Protector protector, TwoStateFunction original) : base(protector, original) { }
+  public override TwoStateFunction WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new TwoStateFunction(protector, this));
 }
 
 public class TwoStatePredicate : TwoStateFunction {
@@ -40,4 +45,8 @@ public class TwoStatePredicate : TwoStateFunction {
     Contract.Requires(ens != null);
     Contract.Requires(decreases != null);
   }
+
+  protected TwoStatePredicate(Protector protector, TwoStatePredicate original) : base(protector, original) { }
+  public override TwoStatePredicate WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new TwoStatePredicate(protector, this));
 }

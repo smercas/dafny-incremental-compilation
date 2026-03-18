@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -6,7 +7,7 @@ using System.Numerics;
 
 namespace Microsoft.Dafny;
 
-public abstract class Expression : NodeWithOrigin {
+public abstract class Expression : NodeWithOrigin, IProtectable<Expression> {
   [ContractInvariantMethod]
   void ObjectInvariant() {
     Contract.Invariant(Origin != null);
@@ -977,4 +978,5 @@ public abstract class Expression : NodeWithOrigin {
       Type = Type.Bool
     };
   }
+  public virtual Expression WithProtections(Protector protector) => new Cloner().CloneExpr(this); //TODO: make abstract when all are implemented
 }

@@ -1,9 +1,10 @@
+using DafnyCore.IncrementalCompilation;
 using System.Diagnostics.Contracts;
 
 namespace Microsoft.Dafny;
 
 [ContractClass(typeof(IVariableContracts))]
-public interface IVariable : ISymbol {
+public interface IVariable : ISymbol, IProtectable<IVariable> {
   string Name {
     get;
   }

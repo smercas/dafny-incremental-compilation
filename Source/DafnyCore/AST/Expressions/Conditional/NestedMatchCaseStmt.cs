@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -52,4 +53,10 @@ public class NestedMatchCaseStmt : NestedMatchCase, IAttributeBearingDeclaration
     }
     resolver.Scope.PopMarker();
   }
+
+  protected NestedMatchCaseStmt(Protector protector, NestedMatchCaseStmt original) : base(protector, original) {
+    Body = [.. original.Body.WithProtections(protector)]; // TODO: prepend protections
+    Attributes = protector.Clone(original.Attributes);
+  }
+  public override NestedMatchCaseStmt WithProtections(Protector protector) => new(protector, this);
 }

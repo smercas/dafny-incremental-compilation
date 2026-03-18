@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -33,4 +34,8 @@ public class GreatestLemma : ExtremeLemma {
 
   public GreatestLemma(Cloner cloner, GreatestLemma greatestLemma) : base(cloner, greatestLemma) {
   }
+
+  protected GreatestLemma(Protector protector, GreatestLemma original) : base(protector, original) { }
+  public override GreatestLemma WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new GreatestLemma(protector, this));
 }

@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Linq;
 
 namespace Microsoft.Dafny;
@@ -9,6 +10,8 @@ public abstract class NodeWithOrigin : Node {
   protected NodeWithOrigin(Cloner cloner, NodeWithOrigin original)
     : this(cloner.Origin(original.Origin)) {
   }
+
+  protected NodeWithOrigin(Protector protector, NodeWithOrigin original) : this(protector.Clone(original.Origin)) { }
 
   [SyntaxConstructor]
   protected NodeWithOrigin(IOrigin? origin) {

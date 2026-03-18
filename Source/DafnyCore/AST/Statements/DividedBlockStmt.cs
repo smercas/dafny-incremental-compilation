@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -44,4 +45,10 @@ public class DividedBlockStmt : BlockLikeStmt, ICloneable<DividedBlockStmt> {
   public new DividedBlockStmt Clone(Cloner cloner) {
     return new DividedBlockStmt(cloner, this);
   }
+  protected DividedBlockStmt(Protector protector, DividedBlockStmt original) : base(protector, original) {
+    BodyInit = [.. original.BodyInit.WithProtections(protector)];
+    BodyProper = [.. original.BodyProper.WithProtections(protector)];
+    SeparatorTok = original.SeparatorTok.ApplyIfNotNull(protector.Clone);
+  }
+  public override DividedBlockStmt WithProtections(Protector protector) => new(protector, this);
 }

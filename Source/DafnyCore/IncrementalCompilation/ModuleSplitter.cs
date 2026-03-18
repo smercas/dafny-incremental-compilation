@@ -14,15 +14,12 @@ using Microsoft.Dafny;
 namespace DafnyCore.IncrementalCompilation {
   public class ModuleSplitter(DafnyOptions dafnyOptions) {
     private DafnyOptions DafnyOptions => dafnyOptions;
-    public static readonly string Name = "_IPM";
-    public static readonly string AttributeName = "ipm";
-    public static readonly string ImmediateAttributeName = $"{AttributeName}_now";
     public LiteralModuleDecl Split(Microsoft.Dafny.Program p) {
       Contract.Requires(p.DefaultModuleDef.SourceDecls.NoneAreOfType<ModuleExportDecl>()); // parser doesn't allow export decls in root module
       static LiteralModuleDecl MakeNewModuleWithOldRootStuff(ModuleSplitter self, Microsoft.Dafny.Program p) {
         var def = new ModuleDefinition(
           p.DefaultModuleDef.Origin,
-          Name.ToNameNodeWithVirtualToken(),
+          Constants.Name.ToNameNodeWithVirtualToken(),
           [],
           ModuleKindEnum.Abstract,
           null,
@@ -95,13 +92,13 @@ namespace DafnyCore.IncrementalCompilation {
           return decl;
         }
         protected abstract void AlterOriginalMemberDecl();
-        protected abstract M CreateDuplicateOfOriginalMemberDecl(TopLevelDecl parent);
+        protected abstract M CreateDuplicateOfOriginalMemberDecl(TopLevelDecl enclosingClass);
         public override TopLevelDecl Process(DafnyOptions dafnyOptions, DefaultModuleDefinition root) {
           var new_decl = CreateModule(dafnyOptions, root);
           switch (EnclosingDecl) {
             case DefaultClassDecl:
               var new_member = CreateDuplicateOfOriginalMemberDecl(new_decl.ModuleDef.DefaultClass!);
-              new_member.NameNode = $"{Name}_{new_member.NameNode}".ToNameNodeWithVirtualToken();
+              new_member.NameNode = $"{Constants.Name}_{new_member.NameNode}".ToNameNodeWithVirtualToken();
               new_decl.ModuleDef.DefaultClass!.Members.Add(new_member);
               AlterOriginalMemberDecl();
               new_decl.ModuleDef.DefaultClass!.SetMembersBeforeResolution();
@@ -118,24 +115,24 @@ namespace DafnyCore.IncrementalCompilation {
         private IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> AttrInContract { get; } = attrInContract;
         private IReadOnlySet<AttributesAccessor> AttrInBody { get; } = attrInBody;
         protected override MethodOrFunction CreateDuplicateOfOriginalMemberDecl(TopLevelDecl enclosingClass) {
-          var r = MemberDecl.AsProtected();
+          var r = MemberDecl.WithProtections(new());
           r.EnclosingClass = enclosingClass;
           return r;
         }
 
         protected override void AlterOriginalMemberDecl() {
           foreach (var acc in Microsoft.Dafny.Util.Concat(AttrInContract.Values.SelectMany(v => v), AttrInBody)) {
-            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, AttributeName);
+            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, Constants.AttributeName);
           }
           foreach (var acc in Microsoft.Dafny.Util.Concat(
-            AttrInContract.Keys.SelectMany(k => ContainingAttr(k, ImmediateAttributeName)), // {:ipm_now} can't be found in an ensures clause that doesn't have {:ipm}
+            AttrInContract.Keys.SelectMany(k => ContainingAttr(k, Constants.ImmediateAttributeName)), // {:ipm_now} can't be found in an ensures clause that doesn't have {:ipm}
             MemberDecl switch {
-              Microsoft.Dafny.Function f => ContainingAttr(f.Body!, ImmediateAttributeName),
-              MethodOrConstructor m => ContainingAttr(m.Body!, ImmediateAttributeName),
+              Microsoft.Dafny.Function f => ContainingAttr(f.Body!, Constants.ImmediateAttributeName),
+              MethodOrConstructor m => ContainingAttr(m.Body!, Constants.ImmediateAttributeName),
               _ => throw new UnreachableException(),
             }
           )) {
-            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, ImmediateAttributeName);
+            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, Constants.ImmediateAttributeName);
           }
         }
       }
@@ -215,7 +212,7 @@ namespace DafnyCore.IncrementalCompilation {
       bool canHaveConstructors = dcd is ClassDecl or TraitDecl;
       foreach (var member in dcd.Members) {
         switch (member) {
-          case ConstantField { Rhs: var e and not null, Attributes: var attrs } cf when HasAttr(attrs, AttributeName) || ContainingAttr(e, AttributeName).Any():
+          case ConstantField { Rhs: var e and not null, Attributes: var attrs } cf when HasAttr(attrs, Constants.AttributeName) || ContainingAttr(e, Constants.AttributeName).Any():
             yield return new RefiningModuleGenerator.FromConstantField<E>(dcd, cf);
             break;
           case ConstantField: break;
@@ -223,17 +220,17 @@ namespace DafnyCore.IncrementalCompilation {
           case MethodOrFunction m_or_f:
             //var contractWithAttr = Microsoft.Dafny.Util.Concat(m_or_f.Req.Where(HasAttr), m_or_f.Ens.Where(HasAttr)).ToImmutableHashSet();
             var attrInContract = m_or_f.Ens.SelectWhere(ens => {
-              var attrs = ContainingAttr(ens, AttributeName).ToImmutableHashSet() as IReadOnlySet<AttributesAccessor>;
+              var attrs = ContainingAttr(ens, Constants.AttributeName).ToImmutableHashSet() as IReadOnlySet<AttributesAccessor>;
               return (attrs.Count != 0, (ens, attrs));
             }).ToImmutableDictionary(p => p.ens, p => p.attrs);
             switch (m_or_f) {
               case Microsoft.Dafny.Function { Body: not null } f
-                  when ContainingAttr(f, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
+                  when ContainingAttr(f, Constants.AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
                 yield return new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, f, attrInContract, assertsWithAttr);
                 break;
               case Microsoft.Dafny.Function: break;
               case MethodOrConstructor { Body: not null } m_or_c when
-                  ContainingAttr(m_or_c, AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
+                  ContainingAttr(m_or_c, Constants.AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
                 yield return m_or_c switch {
                   Method m => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, m, attrInContract, assertsWithAttr),
                   Constructor c => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, c, attrInContract, assertsWithAttr),

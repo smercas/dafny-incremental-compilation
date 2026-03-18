@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -33,4 +34,13 @@ public class Method : MethodOrConstructor {
   public override void SetBody(BlockLikeStmt newBody) {
     body = (BlockStmt?)newBody;
   }
+
+  protected Method(Protector protector, Method original) : base(protector, original) {
+    body = original.Body?.WithProtections(protector);
+    Outs = original.Outs.ConvertAll(o => o.WithProtections(protector));
+    HasStaticKeyword = original.HasStaticKeyword;
+    IsByMethod = original.IsByMethod;
+  }
+  public override Method WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new Method(protector, this));
 }

@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Numerics;
@@ -59,7 +60,7 @@ public class LitPattern : ExtendedPattern {
 
   [SyntaxConstructor]
   public LitPattern(IOrigin origin, Expression origLit, bool isGhost = false) : base(origin, isGhost) {
-    Contract.Requires(origLit is LiteralExpr || origLit is NegationExpression);
+    Contract.Requires(origLit is LiteralExpr or NegationExpression { E: LiteralExpr { Value: BigInteger } or DecimalLiteralExpr });
     OrigLit = origLit;
   }
 
@@ -86,4 +87,10 @@ public class LitPattern : ExtendedPattern {
     resolver.AddAssignableConstraint(literal.Origin, sourceType, literal.Type,
       "literal expression in case (of type '{1}') not assignable to match source type '{0}'");
   }
+
+  protected LitPattern(Protector protector, LitPattern original) : base(protector, original) {
+    OrigLit = original.OrigLit.WithProtections(protector);
+  }
+
+  public override LitPattern WithProtections(Protector protector) => new(protector, this);
 }

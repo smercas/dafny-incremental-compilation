@@ -1,4 +1,6 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
+using DAST;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -78,6 +80,17 @@ public class Formal : NonglobalVariable {
 
     return localField;
   }
+  protected Formal(Protector protector, Formal original) : base(protector, original) {
+    InParam = original.InParam;
+    IsOld = original.IsOld;
+    DefaultValue = original.DefaultValue?.WithProtections(protector);
+    Attributes = protector.Clone(original.Attributes);
+    IsNameOnly = original.IsNameOnly;
+    IsOlder = original.IsOlder;
+    NameForCompilation = original.NameForCompilation;
+    // might need to clone `localField`
+  }
+  public override Formal WithProtections(Protector protector) => new(protector, this);
 }
 
 /// <summary>

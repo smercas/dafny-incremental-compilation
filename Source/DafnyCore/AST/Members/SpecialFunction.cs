@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -13,4 +14,6 @@ public class SpecialFunction : Function, ICallable {
   }
   ModuleDefinition IASTVisitorContext.EnclosingModule { get { return this.Module; } }
   string ICallable.NameRelativeToModule { get { return Name; } }
+
+  public override SpecialFunction WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
 }

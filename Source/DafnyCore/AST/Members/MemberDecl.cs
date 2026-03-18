@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using Microsoft.Dafny.Auditor;
 
 namespace Microsoft.Dafny;
@@ -59,6 +60,10 @@ public abstract class MemberDecl : Declaration, ISymbol {
   protected MemberDecl(Cloner cloner, MemberDecl original) : base(cloner, original) {
     this.EnclosingClass = original.EnclosingClass;
     this.isGhost = original.isGhost;
+  }
+  protected MemberDecl(Protector protector, MemberDecl original) : base(protector, original) {
+    EnclosingClass = original.EnclosingClass;
+    isGhost = original.isGhost;
   }
 
   [SyntaxConstructor]

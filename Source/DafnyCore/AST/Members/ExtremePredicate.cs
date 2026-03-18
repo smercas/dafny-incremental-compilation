@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -46,6 +47,11 @@ public abstract class ExtremePredicate : Function {
     prefixPredCall.CoCall = fexp.CoCall;  // resolve here
     return prefixPredCall;
   }
+
+  protected ExtremePredicate(Protector protector, ExtremePredicate original) : base(protector, original) {
+    TypeOfK = original.TypeOfK;
+  }
+  public abstract override ExtremePredicate WithProtections(Protector protector);
 }
 
 public class LeastPredicate : ExtremePredicate {
@@ -57,4 +63,8 @@ public class LeastPredicate : ExtremePredicate {
     : base(rangeOrigin, nameNode, hasStaticKeyword, isOpaque, typeOfK, typeArgs, ins, result,
       req, reads, ens, body, attributes, signatureEllipsis) {
   }
+
+  protected LeastPredicate(Protector protector, LeastPredicate original) : base(protector, original) { }
+  public override LeastPredicate WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new LeastPredicate(protector, this));
 }

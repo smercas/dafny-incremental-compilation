@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -13,7 +14,7 @@ ExtendedPattern is either:
 2 - An IdPattern of a string and a list of ExtendedPattern, representing either
     a bound variable or a constructor applied to n arguments or a symbolic constant
 */
-public abstract class ExtendedPattern : NodeWithOrigin {
+public abstract class ExtendedPattern : NodeWithOrigin, IProtectable<ExtendedPattern> {
   public bool IsGhost;
 
   [SyntaxConstructor]
@@ -167,4 +168,10 @@ public abstract class ExtendedPattern : NodeWithOrigin {
       }
     }
   }
+
+
+  protected ExtendedPattern(Protector protector, ExtendedPattern original) : base(protector, original) {
+    IsGhost = original.IsGhost;
+  }
+  public abstract ExtendedPattern WithProtections(Protector protector);
 }

@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -22,4 +23,6 @@ public class PrefixPredicate : Function {
     K = k;
     ExtremePred = extremePred;
   }
+
+  public override PrefixPredicate WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
 }

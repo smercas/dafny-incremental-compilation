@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -33,4 +34,9 @@ public class BlockStmt : BlockLikeStmt, ICloneable<BlockStmt> {
   public new BlockStmt Clone(Cloner cloner) {
     return new BlockStmt(cloner, this);
   }
+
+  protected BlockStmt(Protector protector, BlockStmt original) : base(protector, original) {
+    Body = [.. original.Body.WithProtections(protector)];
+  }
+  public override BlockStmt WithProtections(Protector protector) => new(protector, this);
 }

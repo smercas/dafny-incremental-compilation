@@ -1,12 +1,13 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
 namespace Microsoft.Dafny;
 
-public class FrameExpression : NodeWithOrigin, IHasReferences {
+public class FrameExpression : NodeWithOrigin, IHasReferences, IProtectable<FrameExpression> {
   public Expression OriginalExpression { get; } // may be a WildcardExpr
   [FilledInDuringResolution] public Expression? DesugaredExpression; // may be null for modifies clauses, even after resolution
 
@@ -51,4 +52,10 @@ public class FrameExpression : NodeWithOrigin, IHasReferences {
   public IEnumerable<Reference> GetReferences() {
     return Field == null ? Enumerable.Empty<Reference>() : new[] { new Reference(ReportingRange, Field) };
   }
+
+  protected FrameExpression(Protector protector, FrameExpression original) : base(protector, original) {
+    OriginalExpression = original.OriginalExpression.WithProtections(protector);
+    FieldName = original.FieldName;
+  }
+  public FrameExpression WithProtections(Protector protector) => new(protector, this);
 }

@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -190,4 +191,12 @@ public class IdPattern : ExtendedPattern, IHasReferences {
       }
     }
   }
+
+  protected IdPattern(Protector protector, IdPattern original) : base(protector, original) {
+    Id = original.Id;
+    Arguments = original.Arguments?.ConvertAll(a => a.WithProtections(protector));
+    HasParenthesis = original.HasParenthesis;
+    SyntacticType = protector.Clone(original.SyntacticType); // TODO: see what are the implications of cloning this instead of copying
+  }
+  public override IdPattern WithProtections(Protector protector) => new(protector, this);
 }

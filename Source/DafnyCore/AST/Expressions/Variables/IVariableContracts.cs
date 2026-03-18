@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics.Contracts;
+using DafnyCore.IncrementalCompilation;
 using JetBrains.Annotations;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
@@ -95,6 +96,8 @@ public abstract class IVariableContracts : NodeWithOrigin, IVariable {
   public string GetDescription(DafnyOptions options) {
     throw new NotImplementedException();
   }
+
+  public abstract IVariable WithProtections(Protector protector);
 
   protected IVariableContracts(IOrigin origin) : base(origin) {
   }

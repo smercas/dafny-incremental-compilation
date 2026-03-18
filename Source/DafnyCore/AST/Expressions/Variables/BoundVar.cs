@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -17,6 +18,9 @@ public class BoundVar : NonglobalVariable {
 
   public BoundVar(Cloner cloner, BoundVar original) : base(cloner, original) {
   }
+
+  public BoundVar(Protector protector, BoundVar original) : base(protector, original) { }
+  public override BoundVar WithProtections(Protector protector) => new(protector, this);
 }
 
 /// <summary>
@@ -87,6 +91,12 @@ public class QuantifiedVar : BoundVar {
       }
     }
   }
+
+  public QuantifiedVar(Protector protector, QuantifiedVar original) : base(protector, original) {
+    Domain = original.Domain?.WithProtections(protector);
+    Range = original.Range?.WithProtections(protector);
+  }
+  public override QuantifiedVar WithProtections(Protector protector) => new(protector, this);
 }
 
 /// <summary>

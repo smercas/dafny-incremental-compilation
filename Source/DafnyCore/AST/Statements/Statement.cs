@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -6,7 +7,7 @@ using System.Linq;
 
 namespace Microsoft.Dafny;
 
-public abstract class Statement : NodeWithOrigin, IAttributeBearingDeclaration {
+public abstract class Statement : NodeWithOrigin, IAttributeBearingDeclaration, IProtectable<Statement> {
 
   public int ScopeDepth { get; set; }
 
@@ -229,4 +230,10 @@ public abstract class Statement : NodeWithOrigin, IAttributeBearingDeclaration {
   public abstract void ResolveGhostness(ModuleResolver resolver, ErrorReporter reporter, bool mustBeErasable,
     ICodeContext codeContext,
     string? proofContext, bool allowAssumptionVariables, bool inConstructorInitializationPhase);
+
+  protected Statement(Protector protector, Statement original) : base(protector, original) {
+    Attributes = protector.Clone(original.Attributes);
+  }
+
+  public virtual Statement WithProtections(Protector protector) => new Cloner().CloneStmt(this, false); //TODO: make abstract when all are implemented
 }

@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -29,6 +30,9 @@ public class Lemma : Method {
   }
 
   public override bool AllowsAllocation => false;
+  protected Lemma(Protector protector, Lemma original) : base(protector, original) { }
+  public override Lemma WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new Lemma(protector, this));
 }
 
 public class TwoStateLemma : Method {
@@ -62,4 +66,8 @@ public class TwoStateLemma : Method {
   }
 
   public override bool AllowsAllocation => false;
+
+  protected TwoStateLemma(Protector protector, TwoStateLemma original) : base(protector, original) { }
+  public override TwoStateLemma WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new TwoStateLemma(protector, this));
 }

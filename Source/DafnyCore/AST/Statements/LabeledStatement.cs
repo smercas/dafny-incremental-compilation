@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -25,4 +26,9 @@ public class LabeledStatement : Statement, ICloneable<LabeledStatement> {
   public LabeledStatement Clone(Cloner cloner) {
     return new LabeledStatement(cloner, this);
   }
+
+  protected LabeledStatement(Protector protector, LabeledStatement original) : base(protector, original) {
+    Labels = protector.Clone(original.Labels);
+  }
+  public override LabeledStatement WithProtections(Protector protector) => new(protector, this);
 }

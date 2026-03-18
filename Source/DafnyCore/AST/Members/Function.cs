@@ -1,12 +1,14 @@
 #nullable enable
+using DafnyCore;
+using DafnyCore.IncrementalCompilation;
+using Microsoft.Dafny.Auditor;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using System.Collections.Generic;
 using System.CommandLine;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Numerics;
-using DafnyCore;
-using Microsoft.Dafny.Auditor;
-using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using static DafnyCore.IncrementalCompilation.ProtectedExtension;
 
 namespace Microsoft.Dafny;
 
@@ -589,4 +591,17 @@ experimentalPredicateAlwaysGhost - Compiled functions are written `function`. Gh
     }
   }
   public string Designator => WhatKind;
+
+  protected Function(Protector protector, Function original) : base(protector, original) {
+    IsFueled = original.IsFueled;
+    Result = original.Result?.WithProtections(protector);
+    ResultType = protector.Clone(original.ResultType);
+    Body = Body?.WithProtections(protector);
+    ByMethodTok = ByMethodTok?.ApplyIfNotNull(protector.Clone);
+    ByMethodBody = ByMethodBody?.WithProtections(protector);
+    IsOpaque = original.IsOpaque;
+    HasStaticKeyword = original.HasStaticKeyword;
+  }
+  public override Function WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new Function(protector, this));
 }

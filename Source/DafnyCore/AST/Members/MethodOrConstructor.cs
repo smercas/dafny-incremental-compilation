@@ -4,6 +4,7 @@ using System.CommandLine;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Numerics;
+using DafnyCore.IncrementalCompilation;
 using DafnyCore.Options;
 using Microsoft.Dafny.Auditor;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -146,6 +147,11 @@ public abstract class MethodOrConstructor : MethodOrFunction, TypeParameter.Pare
     this.Mod = mod;
     MustReverify = false;
   }
+
+  protected MethodOrConstructor(Protector protector, MethodOrConstructor original) : base(protector, original) {
+    Mod = original.Mod.WithProtections(protector);
+  }
+  public abstract override MethodOrConstructor WithProtections(Protector protector);
 
   public override bool IsRefining => SignatureEllipsis != null;
 

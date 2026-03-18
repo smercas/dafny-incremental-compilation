@@ -113,8 +113,8 @@ namespace DafnyCore.IncrementalCompilation {
     }
     public new ProtectToProveApplySuffix Clone(Cloner cloner) => new(cloner, this);
 
-    public ProtectToProveApplySuffix(Expression e, ChangeContext changeContext) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
-        new(null, e.AsProtected()),
+    public ProtectToProveApplySuffix(Expression e, Protector protector, ChangeContext changeContext) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
+        new(null, e.WithProtections(protector)),
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
         new(null, PlaceholderScope),
         new(null, PlaceholderId),
@@ -124,8 +124,8 @@ namespace DafnyCore.IncrementalCompilation {
       instances.Add(this);
       ChangeContexts[this] = changeContext;
     }
-    public ProtectToProveApplySuffix(Expression e, BigInteger immediateOrder) : base(e.Origin, null, ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
-        new(null, e.AsProtected()),
+    public ProtectToProveApplySuffix(Expression e, Protector protector, BigInteger immediateOrder) : base(e.Origin, null, ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
+        new(null, e.WithProtections(protector)),
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
         new(null, PlaceholderScope),
         new(null, new LiteralExpr(SourceOrigin.NoToken, immediateOrder)),

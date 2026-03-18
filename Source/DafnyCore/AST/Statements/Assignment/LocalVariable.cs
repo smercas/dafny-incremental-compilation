@@ -1,12 +1,14 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
-using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.Dafny;
 
-public class LocalVariable : NodeWithOrigin, IVariable, IAttributeBearingDeclaration {
+public class LocalVariable : NodeWithOrigin, IVariable, IAttributeBearingDeclaration, IProtectable<LocalVariable> {
   string name;
   public string DafnyName => Name;
   public Attributes? Attributes;
@@ -161,4 +163,14 @@ public class LocalVariable : NodeWithOrigin, IVariable, IAttributeBearingDeclara
 
     return localField;
   }
+
+  protected LocalVariable(Protector protector, LocalVariable original) : base(protector, original) {
+    name = original.Name;
+    SyntacticType = protector.Clone(original.SyntacticType);
+    IsGhost = original.IsGhost;
+    // might need to clone `localField`
+  }
+  public LocalVariable WithProtections(Protector protector) => new(protector, this);
+
+  IVariable IProtectable<IVariable>.WithProtections(Protector protector) => WithProtections(protector);
 }

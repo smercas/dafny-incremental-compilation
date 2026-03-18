@@ -1,6 +1,7 @@
 #nullable enable
 using System.Collections.Generic;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using Microsoft.Boogie;
 
 namespace Microsoft.Dafny;
@@ -82,4 +83,7 @@ public abstract class BlockLikeStmt : LabeledStatement, ICanFormat {
     }
     IsGhost = IsGhost || Body.All(ss => ss.IsGhost);  // mark the block statement as ghost if all its substatements are ghost
   }
+
+  protected BlockLikeStmt(Protector protector, BlockLikeStmt original) : base(protector, original) { }
+  public abstract override BlockLikeStmt WithProtections(Protector protector);
 }

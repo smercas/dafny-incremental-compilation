@@ -129,7 +129,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static AttributedExpression AsProtected(this AttributedExpression e, AEKind? kind = null) {
       static AttributedExpression CreateFrom(AttributedExpression e, Expression inner) => new(inner, e.Label?.Clone(), e.Attributes.Clone());
       return kind switch {
-        AEKind.Ensures when Attributes.Contains(e.Attributes, ModuleSplitter.AttributeName) => WithAttributeAdditionalContext(() =>
+        AEKind.Ensures when Attributes.Contains(e.Attributes, Constants.AttributeName) => WithAttributeAdditionalContext(() =>
           CreateFrom(e, e.E.WrappedWith(ProtectToProve with {
             ChangeContext = new ProtectToProveApplySuffix.ChangeContext(MostRecentContext),
           }))
@@ -260,8 +260,8 @@ namespace DafnyCore.IncrementalCompilation {
     #region PredicateStmt
     private static AssertStmt AsProtected(this AssertStmt a) {
       static AssertStmt CreateFrom(AssertStmt s, Expression? e = null) => new(s.Origin.Clone(), e ?? s.Expr.AsProtected(), s.Label?.Clone(), s.Attributes.Clone());
-      var attributeName = ModuleSplitter.AttributeName;
-      var immediateAttributeName = ModuleSplitter.ImmediateAttributeName;
+      var attributeName = Constants.AttributeName;
+      var immediateAttributeName = Constants.ImmediateAttributeName;
       if (Attributes.Contains(a.Attributes, attributeName)) {
         //Console.WriteLine("Protecting to prove assertion " + a.Expr.ToString());
         return WithAttributeAdditionalContext(() => CreateFrom(a, a.Expr.WrappedWith(ProtectToProve with {
@@ -449,8 +449,8 @@ namespace DafnyCore.IncrementalCompilation {
     };
     public static MultiSelectExpr AsProtected(this MultiSelectExpr e) => new(e.Origin.Clone(), e.Array.AsProtected(), e.Indices.ConvertAll(AsProtected));
     public static SeqSelectExpr AsProtected(this SeqSelectExpr e) => new(e.Origin.Clone(), e.SelectOne, e.Seq.AsProtected(), e.E0?.AsProtected(), e.E1?.AsProtected(), e.CloseParen);
-    public static ApplySuffix AsProtected(this ThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
-    public static ApplySuffix AsProtected(this ImplicitThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.Protect); // TODO: check what this is
+    public static ApplySuffix AsProtected(this ThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.OldProtect);
+    public static ApplySuffix AsProtected(this ImplicitThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.OldProtect); // TODO: check what this is
     public static SeqDisplayExpr AsProtected(this SeqDisplayExpr e) => new(e.Origin.Clone(), e.Elements.ConvertAll(AsProtected));
     public static SetDisplayExpr AsProtected(this SetDisplayExpr e) => new(e.Origin.Clone(), e.Finite, e.Elements.ConvertAll(AsProtected));
     public static MultiSetDisplayExpr AsProtected(this MultiSetDisplayExpr e) => new(e.Origin.Clone(), e.Elements.ConvertAll(AsProtected));
@@ -466,7 +466,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static ITEExpr AsProtected(this ITEExpr e) => new(e.Origin.Clone(), e.IsBindingGuard, e.Test.AsProtected(), e.Thn.AsProtected(), e.Els.AsProtected());
     public static NestedMatchExpr AsProtected(this NestedMatchExpr e) => new(e.Origin.Clone(), e.Source.AsProtected(), e.Cases.ConvertAll(static c => new NestedMatchCaseExpr(c.Origin.Clone(), c.Pat.AsProtected(), c.Body.AsProtected(), c.Attributes.Clone())), e.UsesOptionalBraces, e.Attributes.Clone());
     public static TernaryExpr AsProtected(this TernaryExpr e) => new(e.Origin.Clone(), e.Op, e.E0.AsProtected(), e.E1.AsProtected(), e.E2.AsProtected());
-    public static ApplySuffix AsProtected(this DatatypeValue e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
+    public static ApplySuffix AsProtected(this DatatypeValue e) => e.Clone().WrappedWith(ProtectorFunctions.OldProtect);
     public static LocalsObjectExpression AsProtected(this LocalsObjectExpression e) => new(e.Origin.Clone());
     public static OldExpr AsProtected(this OldExpr e) => new(e.Origin.Clone(), e.Expr.AsProtected(), e.At);
     public static UnchangedExpr AsProtected(this UnchangedExpr e) => new(e.Origin.Clone(), e.Frame.ConvertAll(AsProtected), e.At);
@@ -486,9 +486,9 @@ namespace DafnyCore.IncrementalCompilation {
     }
     public static ConversionExpr AsProtected(this ConversionExpr e) => new(e.Origin.Clone(), e.E.AsProtected(), e.ToType.Clone());//, e.messagePrefix);
     public static TypeTestExpr AsProtected(this TypeTestExpr e) => new(e.Origin.Clone(), e.E.AsProtected(), e.ToType.Clone());
-    public static ApplySuffix AsProtected(this IdentifierExpr e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
+    public static ApplySuffix AsProtected(this IdentifierExpr e) => e.Clone().WrappedWith(ProtectorFunctions.OldProtect);
     public static LetExpr AsProtected(this LetExpr e) => new(e.Origin.Clone(), e.LHSs.ConvertAll(AsProtected), e.RHSs.ConvertAll(AsProtected), e.Body.AsProtected(), e.Exact, e.Attributes.Clone());
-    public static ApplySuffix AsProtected(this NameSegment e) => e.Clone().WrappedWith(ProtectorFunctions.Protect);
+    public static ApplySuffix AsProtected(this NameSegment e) => e.Clone().WrappedWith(ProtectorFunctions.OldProtect);
     // not sure if anything needs to be done for backtick tokens, you'll find out I guess
     // there are both cases in which `Lhs` should be protected and in which it shouldn't be protected
     // maybe the solution would be deferred protection aka both a clone and a protected clone are made and, during resolution, we see if the protected clone is valid
@@ -714,7 +714,7 @@ namespace DafnyCore.IncrementalCompilation {
       }
     }
     public static void Protect(this TopLevelDeclWithMembers decl) {
-      decl.Members = decl.Members.ConvertAll(m => m is MethodOrFunction mof ? mof.AsProtected() : m);
+      decl.Members = decl.Members.ConvertAll(m => m is MethodOrFunction mof ? mof.WithProtections(new()) : m);
       decl.SetMembersBeforeResolution();
     }
   }

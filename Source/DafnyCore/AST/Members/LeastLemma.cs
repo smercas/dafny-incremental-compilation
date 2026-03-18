@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -32,4 +33,8 @@ public class LeastLemma : ExtremeLemma {
 
   public LeastLemma(Cloner cloner, LeastLemma leastLemma) : base(cloner, leastLemma) {
   }
+
+  protected LeastLemma(Protector protector, LeastLemma original) : base(protector, original) { }
+  public override LeastLemma WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new LeastLemma(protector, this));
 }

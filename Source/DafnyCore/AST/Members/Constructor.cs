@@ -1,6 +1,7 @@
 #nullable enable
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using DafnyCore.IncrementalCompilation;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace Microsoft.Dafny;
@@ -67,4 +68,10 @@ public class Constructor : MethodOrConstructor {
     body = newBody is BlockStmt blockStmt
       ? new DividedBlockStmt(blockStmt.Origin, blockStmt.Body, null, [], []) : (DividedBlockStmt)newBody;
   }
+
+  protected Constructor(Protector protector, Constructor original) : base(protector, original) {
+    body = original.Body?.WithProtections(protector);
+  }
+  public override Constructor WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new Constructor(protector, this));
 }

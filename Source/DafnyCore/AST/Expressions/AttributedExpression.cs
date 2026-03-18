@@ -1,12 +1,14 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
 namespace Microsoft.Dafny;
 
 [SyntaxBaseType(null)]
-public class AttributedExpression : NodeWithOrigin, IAttributeBearingDeclaration {
+public class AttributedExpression : NodeWithOrigin, IAttributeBearingDeclaration, IProtectable<AttributedExpression> {
   public Expression E;
   public AssertLabel? Label;
 
@@ -38,6 +40,22 @@ public class AttributedExpression : NodeWithOrigin, IAttributeBearingDeclaration
     E = e;
     Label = label;
     Attributes = attributes;
+  }
+
+  public enum Kind { Ensures };
+  public AttributedExpression WithProtections(Protector protector) => WithProtections(protector, null);
+  public AttributedExpression WithProtections(Protector protector, Kind? kind) {
+    AttributedExpression CreateFrom(Expression E) => new(E, Label.ApplyIfNotNull(protector.Clone), protector.Clone(Attributes));
+    return kind switch {
+      Kind.Ensures when Attributes.Contains(Attributes, Constants.AttributeName) =>
+        protector.WithAttributeAdditionalContext(() => CreateFrom(
+          E.WrappedWith(ProtectorFunctions.ProtectToProve with {
+            ChangeContext = new ProtectToProveApplySuffix.ChangeContext(protector.MostRecentContext),
+          })
+        )),
+      Kind.Ensures or null => CreateFrom(E.WithProtections(protector)),
+      _ => throw new UnreachableException(),
+    };
   }
 
   public void AddCustomizedErrorMessage(IOrigin tok, string s) {

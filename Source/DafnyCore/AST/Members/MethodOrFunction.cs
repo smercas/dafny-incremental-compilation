@@ -1,13 +1,16 @@
 #nullable enable
+using DafnyCore;
+using DafnyCore.IncrementalCompilation;
+using DafnyCore.Options;
+using System;
 using System.Collections.Generic;
 using System.CommandLine;
 using System.Linq;
-using DafnyCore;
-using DafnyCore.Options;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.Dafny;
 
-public abstract class MethodOrFunction : MemberDecl, ICodeContainer {
+public abstract class MethodOrFunction : MemberDecl, ICodeContainer, IProtectable<MethodOrFunction> {
   public static Option<bool> AllowExternalContracts = new("--allow-external-contracts",
     "Allow exporting callables with preconditions, and importing callables with postconditions");
 
@@ -58,6 +61,21 @@ public abstract class MethodOrFunction : MemberDecl, ICodeContainer {
       this.ContainsHide = original.ContainsHide;
     }
   }
+
+  protected MethodOrFunction(Protector protector, MethodOrFunction original) : base(protector, original) {
+    TypeArgs = original.TypeArgs.ConvertAll<TypeParameter>(protector.Clone);
+    Req = [
+      .. original.Ins.Select(i => new AttributedExpression(i.Name.WrappedWith(ProtectorFunctions.NewProtect))),
+      .. original.Req.Select(r => r.WithProtections(protector)),
+    ];
+    Decreases = original.Decreases.WithProtections(protector);
+    Ens = original.Ens.ConvertAll(e => e.WithProtections(protector, AttributedExpression.Kind.Ensures));
+    Reads = original.Reads.WithProtections(protector);
+    Ins = original.Ins.ConvertAll(p => p.WithProtections(protector));
+    SignatureEllipsis = original.SignatureEllipsis;
+  }
+
+  public abstract MethodOrFunction WithProtections(Protector protector);
 
   protected abstract bool Bodyless { get; }
   protected abstract string TypeName { get; }

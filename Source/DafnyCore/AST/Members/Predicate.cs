@@ -1,6 +1,7 @@
 #nullable enable
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using DafnyCore.IncrementalCompilation;
 using JetBrains.Annotations;
 
 namespace Microsoft.Dafny;
@@ -30,4 +31,11 @@ public class Predicate : Function {
     Contract.Requires(bodyOrigin == Predicate.BodyOriginKind.OriginalOrInherited || body != null);
     BodyOrigin = bodyOrigin;
   }
+
+  protected Predicate(Protector protector, Predicate original) : base(protector, original) {
+    BodyOrigin = original.BodyOrigin;
+  }
+
+  public override Predicate WithProtections(Protector protector) =>
+    protector.WithMemberAdditionalContext(() => new Predicate(protector, this));
 }

@@ -3,11 +3,12 @@
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace Microsoft.Dafny;
 
-public abstract class NonglobalVariable : NodeWithOrigin, IVariable {
+public abstract class NonglobalVariable : NodeWithOrigin, IVariable, IProtectable<NonglobalVariable> {
   public Name NameNode { get; }
 
   [SyntaxConstructor]
@@ -129,4 +130,14 @@ public abstract class NonglobalVariable : NodeWithOrigin, IVariable {
   public string GetDescription(DafnyOptions options) {
     return this.AsText();
   }
+
+
+  public NonglobalVariable(Protector protector, NonglobalVariable original) : base(protector, original) {
+    NameNode = protector.Clone(original.NameNode);
+    SyntacticType = protector.Clone(original.SyntacticType);
+    IsGhost = original.IsGhost;
+  }
+  public abstract NonglobalVariable WithProtections(Protector protector);
+
+  IVariable IProtectable<IVariable>.WithProtections(Protector protector) => WithProtections(protector);
 }

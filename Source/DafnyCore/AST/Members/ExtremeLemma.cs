@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -47,4 +48,9 @@ public abstract class ExtremeLemma : Method {
   }
 
   public override bool AllowsAllocation => false;
+
+  protected ExtremeLemma(Protector protector, ExtremeLemma original) : base(protector, original) {
+    TypeOfK = original.TypeOfK;
+  }
+  public abstract override ExtremeLemma WithProtections(Protector protector);
 }

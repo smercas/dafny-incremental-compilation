@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -40,4 +41,9 @@ public class DisjunctivePattern : ExtendedPattern {
       alternative.Resolve(resolver, resolutionContext, sourceType, isGhost, inStatementContext, true, true);
     }
   }
+
+  protected DisjunctivePattern(Protector protector, DisjunctivePattern original) : base(protector, original) {
+    Alternatives = original.Alternatives.ConvertAll(a => a.WithProtections(protector));
+  }
+  public override DisjunctivePattern WithProtections(Protector protector) => new(protector, this);
 }

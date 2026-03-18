@@ -1,6 +1,7 @@
 #nullable enable
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using DafnyCore.IncrementalCompilation;
 using Microsoft.Dafny.Auditor;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
@@ -34,6 +35,12 @@ public abstract class Declaration : NodeWithOrigin, IAttributeBearingDeclaration
     NameNode = original.NameNode.Clone(cloner);
     BodyStartTok = cloner.Origin(original.BodyStartTok);
     Attributes = cloner.CloneAttributes(original.Attributes);
+  }
+
+  protected Declaration(Protector protector, Declaration original) : base(protector, original) {
+    NameNode = protector.Clone(original.NameNode);
+    BodyStartTok = protector.Clone(original.BodyStartTok);
+    Attributes = protector.Clone(original.Attributes);
   }
 
   [SyntaxConstructor]

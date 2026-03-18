@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -45,5 +46,13 @@ public class NestedMatchCaseExpr : NestedMatchCase, IAttributeBearingDeclaration
     var writer = new StringWriter();
     new Printer(writer, DafnyOptions.Default).PrintNestedMatchCase(false, false, this, false, false);
     return writer.ToString();
+  }
+
+  protected NestedMatchCaseExpr(Protector protector, NestedMatchCaseExpr original) : base(protector, original) {
+    Body = original.Body.WithProtections(protector); // TODO: prepend protections
+    Attributes = protector.Clone(original.Attributes);
+  }
+  public override NestedMatchCaseExpr WithProtections(Protector protector) {
+    throw new System.NotImplementedException();
   }
 }
