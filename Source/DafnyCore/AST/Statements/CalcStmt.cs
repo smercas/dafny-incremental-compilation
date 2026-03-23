@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using JetBrains.Annotations;
 
 namespace Microsoft.Dafny;
 
 public class CalcStmt : Statement, ICloneable<CalcStmt>, ICanFormat {
-  public abstract class CalcOp {
+  public abstract class CalcOp : IProtectable<CalcOp> {
+    protected CalcOp() { }
     /// <summary>
     /// Resulting operator "x op z" if "x this y" and "y other z".
     /// Returns null if this and other are incompatible.
@@ -20,6 +22,9 @@ public class CalcStmt : Statement, ICloneable<CalcStmt>, ICanFormat {
     /// </summary>
     [System.Diagnostics.Contracts.Pure]
     public abstract Expression StepExpr(Expression line0, Expression line1);
+
+    protected CalcOp(Protector protector, CalcOp original) { }
+    public abstract CalcOp WithProtections(Protector protector);
   }
 
   public class BinaryCalcOp : CalcOp {
@@ -112,6 +117,10 @@ public class CalcStmt : Statement, ICloneable<CalcStmt>, ICanFormat {
       return BinaryExpr.OpcodeString(Op);
     }
 
+    protected BinaryCalcOp(Protector protector, BinaryCalcOp original) : base(protector, original) {
+      Op = original.Op;
+    }
+    public override BinaryCalcOp WithProtections(Protector protector) => new(protector, this);
   }
 
   public class TernaryCalcOp : CalcOp {
@@ -152,6 +161,10 @@ public class CalcStmt : Statement, ICloneable<CalcStmt>, ICanFormat {
       return "==#";
     }
 
+    protected TernaryCalcOp(Protector protector, TernaryCalcOp original) : base(protector, original) {
+      Index = original.Index.WithProtections(protector);
+    }
+    public override TernaryCalcOp WithProtections(Protector protector) => new(protector, this);
   }
 
   /// <summary>
@@ -439,4 +452,18 @@ public class CalcStmt : Statement, ICloneable<CalcStmt>, ICanFormat {
         inConstructorInitializationPhase);
     }
   }
+
+  protected CalcStmt(Protector protector, CalcStmt original) : base(protector, original) {
+    UserSuppliedOp = original.UserSuppliedOp.WithProtections(protector);
+    Lines = original.Lines switch {
+    [.. IEnumerable<Expression> withoutLast2, var secondToLast, var last]
+        when secondToLast == last && secondToLast.WithProtections(protector) is var lastToAdd =>
+      [.. withoutLast2.Select(l => l.WithProtections(protector)), lastToAdd, lastToAdd],
+      _ => original.Lines.ConvertAll(l => l.WithProtections(protector)),
+    };
+    StepOps = original.StepOps.ConvertAll(o => o.WithProtections(protector));
+    Hints = original.Hints.ConvertAll(h => h.WithProtections(protector));
+    Steps = [];
+  }
+  public override CalcStmt WithProtections(Protector protector) => new(protector, this);
 }

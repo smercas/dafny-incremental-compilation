@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -95,4 +96,9 @@ public class WhileStmt : OneBodyLoopStmt, ICloneable<WhileStmt>, ICanFormat {
       ExpressionTester.CheckIsCompilable(resolver, reporter, Guard, codeContext);
     }
   }
+
+  protected WhileStmt(Protector protector, WhileStmt original) : base(protector, original) {
+    Guard = original.Guard?.WithProtections(protector);
+  }
+  public override WhileStmt WithProtections(Protector protector) => new(protector, this);
 }

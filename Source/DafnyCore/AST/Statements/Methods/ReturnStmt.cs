@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -20,4 +21,9 @@ public class ReturnStmt : ProduceStmt, ICloneable<ReturnStmt> {
     : base(origin, rhss, attributes) {
     Contract.Requires(origin != null);
   }
+
+  protected ReturnStmt(Protector protector, ReturnStmt original) : base(protector, original) {
+    ReverifyPost = original.ReverifyPost;
+  }
+  public override ReturnStmt WithProtections(Protector protector) => new(protector, this);
 }

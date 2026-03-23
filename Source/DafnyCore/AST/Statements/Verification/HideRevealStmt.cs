@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using Microsoft.Boogie;
 
 namespace Microsoft.Dafny;
@@ -148,4 +149,11 @@ public class HideRevealStmt : Statement, ICloneable<HideRevealStmt>, ICanFormat,
       $"a {Kind} statement", allowAssumptionVariables, inConstructorInitializationPhase));
     IsGhost = ResolvedStatements.All(ss => ss.IsGhost);
   }
+
+  protected HideRevealStmt(Protector protector, HideRevealStmt original) : base(protector, original) {
+    Mode = original.Mode;
+    Exprs = original.Exprs?.ConvertAll(e => e.WithProtections(protector));
+    Wildcard = original.Wildcard;
+  }
+  public override HideRevealStmt WithProtections(Protector protector) => new(protector, this);
 }

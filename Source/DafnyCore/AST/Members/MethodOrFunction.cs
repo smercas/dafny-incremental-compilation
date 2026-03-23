@@ -65,7 +65,7 @@ public abstract class MethodOrFunction : MemberDecl, ICodeContainer, IProtectabl
   protected MethodOrFunction(Protector protector, MethodOrFunction original) : base(protector, original) {
     TypeArgs = original.TypeArgs.ConvertAll<TypeParameter>(protector.Clone);
     Req = [
-      .. original.Ins.Select(i => new AttributedExpression(i.Name.WrappedWith(ProtectorFunctions.NewProtect))),
+      .. original.Ins.Select(ProtectorExtensions.ToProtectClause),
       .. original.Req.Select(r => r.WithProtections(protector)),
     ];
     Decreases = original.Decreases.WithProtections(protector);

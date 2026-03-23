@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -88,4 +89,10 @@ public class VarDeclStmt : Statement, ICloneable<VarDeclStmt>, ICanFormat {
       }
     }
   }
+
+  protected VarDeclStmt(Protector protector, VarDeclStmt original) : base(protector, original) {
+    Locals = original.Locals.ConvertAll(l => l.WithProtections(protector));
+    Assign = original.Assign?.WithProtections(protector);
+  }
+  public override VarDeclStmt WithProtections(Protector protector) => new(protector, this);
 }

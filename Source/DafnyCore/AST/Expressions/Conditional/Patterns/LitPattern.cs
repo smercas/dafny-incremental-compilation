@@ -93,4 +93,5 @@ public class LitPattern : ExtendedPattern {
   }
 
   public override LitPattern WithProtections(Protector protector) => new(protector, this);
+  protected internal override IEnumerable<string> ToBeProtectedUnfiltered => [];
 }

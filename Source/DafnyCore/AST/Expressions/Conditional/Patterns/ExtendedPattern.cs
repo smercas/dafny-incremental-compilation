@@ -174,4 +174,6 @@ public abstract class ExtendedPattern : NodeWithOrigin, IProtectable<ExtendedPat
     IsGhost = original.IsGhost;
   }
   public abstract ExtendedPattern WithProtections(Protector protector);
+  protected internal abstract IEnumerable<string> ToBeProtectedUnfiltered { get; }
+  public IEnumerable<string> ToBeProtected => ToBeProtectedUnfiltered.Where(s => !s.StartsWith("_v"));
 }

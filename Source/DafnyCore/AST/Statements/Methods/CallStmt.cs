@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -137,4 +138,6 @@ public class CallStmt : Statement, ICloneable<CallStmt> {
       }
     }
   }
+
+  public override CallStmt WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
 }

@@ -2,11 +2,12 @@
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using JetBrains.Annotations;
 
 namespace Microsoft.Dafny;
 
-public class ActualBindings : NodeWithoutOrigin {
+public class ActualBindings : NodeWithoutOrigin, IProtectable<ActualBindings> {
   public List<ActualBinding> ArgumentBindings;
 
   [SyntaxConstructor]
@@ -42,9 +43,14 @@ public class ActualBindings : NodeWithoutOrigin {
 
   public override IEnumerable<INode> Children => arguments == null ? ArgumentBindings : arguments;
   public override IEnumerable<INode> PreResolveChildren => Children;
+
+  protected ActualBindings(Protector protector, ActualBindings original) : this(
+    original.ArgumentBindings.ConvertAll(ab => ab.WithProtections(protector))
+  ) { }
+  public ActualBindings WithProtections(Protector protector) => new(protector, this);
 }
 
-public class ActualBinding : NodeWithoutOrigin {
+public class ActualBinding : NodeWithoutOrigin, IProtectable<ActualBinding> {
   public IOrigin? FormalParameterName;
   public Expression Actual;
   public bool IsGhost;
@@ -59,4 +65,10 @@ public class ActualBinding : NodeWithoutOrigin {
     Actual = actual;
     IsGhost = isGhost;
   }
+
+  protected ActualBinding(Protector protector, ActualBinding original) : this(
+    original.FormalParameterName.ApplyIfNotNull(protector.Clone),
+    original.Actual.WithProtections(protector)
+  ) { }
+  public ActualBinding WithProtections(Protector protector) => new(protector, this);
 }

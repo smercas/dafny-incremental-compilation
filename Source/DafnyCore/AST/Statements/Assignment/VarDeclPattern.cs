@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -72,4 +73,11 @@ public class VarDeclPattern : Statement, ICloneable<VarDeclPattern>, ICanFormat 
       IsGhost = spec;
     }
   }
+
+  protected VarDeclPattern(Protector protector, VarDeclPattern original) : base(protector, original) {
+    LHS = original.LHS.WithProtections(protector);
+    RHS = original.RHS.WithProtections(protector);
+    HasGhostModifier = original.HasGhostModifier;
+  }
+  public override VarDeclPattern WithProtections(Protector protector) => new(protector, this);
 }

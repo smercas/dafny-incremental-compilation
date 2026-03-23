@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -15,7 +16,7 @@ namespace Microsoft.Dafny;
 /// which it is; in this case, Var is non-null, because this is the only place where Var.IsGhost
 /// is recorded by the parser.
 /// </summary>
-public class CasePattern<VT> : NodeWithOrigin
+public class CasePattern<VT> : NodeWithOrigin, IProtectable<CasePattern<VT>>
   where VT : IVariable {
   public string Id;
   // After successful resolution, exactly one of the following two fields is non-null.
@@ -129,4 +130,11 @@ public class CasePattern<VT> : NodeWithOrigin
 
   public override IEnumerable<INode> Children => Var == null ? (Arguments ?? Enumerable.Empty<Node>()) : new[] { (INode)Var };
   public override IEnumerable<INode> PreResolveChildren => Children;
+
+  protected CasePattern(Protector protector, CasePattern<VT> original) : base(protector, original) {
+    Id = original.Id;
+    Var = original.Var.ApplyIfNotNull(v => (VT)v.WithProtections(protector));
+    Arguments = original.Arguments?.ConvertAll(a => a.WithProtections(protector));
+  }
+  public CasePattern<VT> WithProtections(Protector protector) => new(protector, this);
 }

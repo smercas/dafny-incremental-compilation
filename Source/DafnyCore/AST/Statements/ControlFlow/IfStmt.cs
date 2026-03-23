@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -140,4 +141,12 @@ public class IfStmt : LabeledStatement, ICloneable<IfStmt>, ICanFormat {
       ExpressionTester.CheckIsCompilable(resolver, reporter, Guard, codeContext);
     }
   }
+
+  protected IfStmt(Protector protector, IfStmt original) : base(protector, original) {
+    IsBindingGuard = original.IsBindingGuard;
+    Guard = original.Guard?.WithProtections(protector);
+    Thn = original.Thn.WithProtections(protector);
+    Els = original.Els?.WithProtections(protector);
+  }
+  public override IfStmt WithProtections(Protector protector) => new(protector, this);
 }

@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -133,4 +134,10 @@ public class AssignSuchThatStmt : ConcreteAssignStatement, ICloneable<AssignSuch
       }
     }
   }
+
+  protected AssignSuchThatStmt(Protector protector, AssignSuchThatStmt original) : base(protector, original) {
+    Expr = original.Expr.WithProtections(protector);
+    AssumeToken = protector.Clone(original.AssumeToken);
+  }
+  public override AssignSuchThatStmt WithProtections(Protector protector) => new(protector, this);
 }

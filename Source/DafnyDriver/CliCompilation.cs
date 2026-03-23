@@ -35,7 +35,7 @@ public class CliCompilation {
   private CliCompilation(
     CreateCompilation createCompilation,
     DafnyOptions options,
-    CliCompilation? oldCompilation = null) { // TODO: remove when we properly reuse the execution engine
+    CliCompilation? oldCompilation = null) { // IPMTODO: remove when we properly reuse the execution engine
     Options = options;
 
     if (options.DafnyProject == null) {

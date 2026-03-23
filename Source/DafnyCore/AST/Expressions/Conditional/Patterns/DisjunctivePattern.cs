@@ -46,4 +46,12 @@ public class DisjunctivePattern : ExtendedPattern {
     Alternatives = original.Alternatives.ConvertAll(a => a.WithProtections(protector));
   }
   public override DisjunctivePattern WithProtections(Protector protector) => new(protector, this);
+
+  protected internal override IEnumerable<string> ToBeProtectedUnfiltered {
+    get {
+      foreach (var alternative in Alternatives) {
+        foreach (var trans in alternative.ToBeProtectedUnfiltered) { yield return trans; }
+      }
+    }
+  }
 }

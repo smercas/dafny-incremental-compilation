@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -89,4 +90,11 @@ public abstract class LoopStmt : LabeledStatement, IHasNavigationToken {
   }
 
   public TokenRange NavigationRange => ReportingRange;
+
+  protected LoopStmt(Protector protector, LoopStmt original) : base(protector, original) {
+    Invariants = original.Invariants.ConvertAll(i => i.WithProtections(protector, AttributedExpression.Kind.Invariant));
+    Decreases = original.Decreases.WithProtections(protector);
+    Mod = original.Mod.WithProtections(protector);
+  }
+  public abstract override LoopStmt WithProtections(Protector protector);
 }

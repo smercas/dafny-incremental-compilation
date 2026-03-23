@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -104,4 +105,10 @@ public class AllocateClass : TypeRhs, ICloneable<AllocateClass> {
                       Bindings.ArgumentBindings.Select(a => a.Actual) : null) ??
                     (Bindings != null ? Arguments : null) ??
                     Enumerable.Empty<Node>());
+
+  protected AllocateClass(Protector protector, AllocateClass original) : base(protector, original) {
+    Path = protector.Clone(original.Path);
+    Bindings = original.Bindings?.WithProtections(protector);
+  }
+  public override AllocateClass WithProtections(Protector protector) => new(protector, this);
 }

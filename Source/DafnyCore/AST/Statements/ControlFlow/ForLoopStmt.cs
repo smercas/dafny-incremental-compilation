@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -115,4 +116,12 @@ public class ForLoopStmt : OneBodyLoopStmt, ICloneable<ForLoopStmt>, ICanFormat 
       }
     }
   }
+
+  protected ForLoopStmt(Protector protector, ForLoopStmt original) : base(protector, original, [original.LoopIndex.ToProtectAssertion()]) {
+    LoopIndex = original.LoopIndex.WithProtections(protector);
+    Start = original.Start.WithProtections(protector);
+    End = original.End?.WithProtections(protector);
+    GoingUp = original.GoingUp;
+  }
+  public override ForLoopStmt WithProtections(Protector protector) => new(protector, this);
 }

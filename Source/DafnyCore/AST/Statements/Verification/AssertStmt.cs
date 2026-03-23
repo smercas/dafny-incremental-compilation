@@ -1,7 +1,10 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
+using Microsoft.Dafny.Auditor;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
-using Microsoft.Dafny.Auditor;
+using System.Numerics;
 
 namespace Microsoft.Dafny;
 
@@ -111,6 +114,28 @@ public class AssertStmt : PredicateStmt, ICloneable<AssertStmt>, ICanFormat {
     ICodeContext codeContext,
     string? proofContext, bool allowAssumptionVariables, bool inConstructorInitializationPhase) {
     IsGhost = true;
+  }
+
+  protected AssertStmt(Protector protector, AssertStmt original, Expression? expr = null) : base(protector, original, expr) {
+    Label = original.Label.ApplyIfNotNull(protector.Clone);
+  }
+  public override AssertStmt WithProtections(Protector protector) {
+    var attributeName = Constants.AttributeName;
+    var immediateAttributeName = Constants.ImmediateAttributeName;
+    if (Attributes.Contains(Attributes, Constants.AttributeName)) {
+      //Console.WriteLine("Protecting to prove assertion " + a.Expr.ToString());
+      return protector.WithAttributeAdditionalContext(() => new AssertStmt(protector, this, Expr.WrappedWith(ProtectorFunctions.ProtectToProve with {
+        ChangeContext = new ProtectToProveApplySuffix.ChangeContext(protector.MostRecentContext),
+      })));
+    }
+    if (Attributes.Find(Attributes, immediateAttributeName) is { } attr) {
+      if (attr is { Args: [] }) { attr.Args.Add(new LiteralExpr(SourceOrigin.NoToken, 0)); } // temporary bcs frontend doesn't use {:ipm_now 0} yet
+      if (attr is not { Args: [var arg] }) { throw new Exception($"the {{:{immediateAttributeName}}} attribute requires an argument"); }
+      if (arg is not LiteralExpr { Value: BigInteger entryPoint }) { throw new Exception($"{{:{immediateAttributeName}}}'s argument needs to be a natural number"); }
+      return new(protector, this, Expr.WrappedWith(ProtectorFunctions.ProtectToProveImmediate with { EntryPoint = entryPoint }));
+    }
+    //Console.WriteLine($"assert statement: {a.Expr}");
+    return new(protector, this);
   }
 }
 

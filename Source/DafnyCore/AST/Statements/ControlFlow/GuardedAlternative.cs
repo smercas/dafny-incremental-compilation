@@ -1,10 +1,11 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
 namespace Microsoft.Dafny;
 
-public class GuardedAlternative : NodeWithOrigin, IAttributeBearingDeclaration {
+public class GuardedAlternative : NodeWithOrigin, IAttributeBearingDeclaration, IProtectable<GuardedAlternative> {
   public bool IsBindingGuard;
   public Expression Guard;
   public List<Statement> Body;
@@ -41,4 +42,12 @@ public class GuardedAlternative : NodeWithOrigin, IAttributeBearingDeclaration {
     this.Body = body;
     this.Attributes = attrs;
   }
+
+  protected GuardedAlternative(Protector protector, GuardedAlternative original) : base(protector, original) {
+    IsBindingGuard = original.IsBindingGuard;
+    Guard = original.Guard.WithProtections(protector);
+    Body = [.. original.Body.WithProtections(protector)];
+    Attributes = protector.Clone(original.Attributes);
+  }
+  public GuardedAlternative WithProtections(Protector protector) => new(protector, this);
 }

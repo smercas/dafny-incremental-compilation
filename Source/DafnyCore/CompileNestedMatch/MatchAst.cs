@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -217,6 +218,8 @@ public class MatchStmt : Statement, IMatch, ICloneable<MatchStmt> {
       yield return Source;
     }
   }
+
+  public override MatchStmt WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
 }
 
 public class MatchCaseStmt : MatchCase {

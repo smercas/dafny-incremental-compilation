@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -14,4 +15,6 @@ public class RefinedWhileStmt : WhileStmt {
     : base(origin, guard, invariants, decreases, mod, body) {
     Contract.Requires(body != null);
   }
+
+  public override RefinedWhileStmt WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
 }

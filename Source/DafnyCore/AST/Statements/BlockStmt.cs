@@ -35,8 +35,10 @@ public class BlockStmt : BlockLikeStmt, ICloneable<BlockStmt> {
     return new BlockStmt(cloner, this);
   }
 
-  protected BlockStmt(Protector protector, BlockStmt original) : base(protector, original) {
-    Body = [.. original.Body.WithProtections(protector)];
+  protected BlockStmt(Protector protector, BlockStmt original, IEnumerable<Statement>? additional) : base(protector, original) {
+    Body = [.. additional ?? [], .. original.Body.WithProtections(protector)];
   }
-  public override BlockStmt WithProtections(Protector protector) => new(protector, this);
+
+  public override BlockStmt WithProtections(Protector protector) => WithProtections(protector, null!);
+  public BlockStmt WithProtections(Protector protector, IEnumerable<Statement> additional) => new(protector, this, additional);
 }

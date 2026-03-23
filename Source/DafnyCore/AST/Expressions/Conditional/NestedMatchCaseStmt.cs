@@ -55,7 +55,10 @@ public class NestedMatchCaseStmt : NestedMatchCase, IAttributeBearingDeclaration
   }
 
   protected NestedMatchCaseStmt(Protector protector, NestedMatchCaseStmt original) : base(protector, original) {
-    Body = [.. original.Body.WithProtections(protector)]; // TODO: prepend protections
+    Body = [
+      .. original.Pat.ToBeProtected.Select(ProtectorExtensions.ToProtectAssertion),
+      .. original.Body.WithProtections(protector)
+    ];
     Attributes = protector.Clone(original.Attributes);
   }
   public override NestedMatchCaseStmt WithProtections(Protector protector) => new(protector, this);

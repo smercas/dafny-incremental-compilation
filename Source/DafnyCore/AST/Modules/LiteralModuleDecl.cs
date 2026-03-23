@@ -45,7 +45,7 @@ public class LiteralModuleDecl : ModuleDecl, ICanFormat, IHasSymbolChildren {
       ModuleDef = cloner.CloneModuleDefinition(original.ModuleDef, enclosingModule);
       ModuleDef.EnclosingLiteralModuleDecl = this;
     } else {
-      // TODO: open an issue about what should happen in this case, since `ReferenceEquals(ModuleDef.EnclosingLiteralModuleDecl, this) == false`
+      // IPMTODO: open an issue about what should happen in this case, since `ReferenceEquals(ModuleDef.EnclosingLiteralModuleDecl, this) == false`
       ModuleDef = original.ModuleDef;
     }
     DefaultExport = original.DefaultExport;

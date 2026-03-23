@@ -235,5 +235,5 @@ public abstract class Statement : NodeWithOrigin, IAttributeBearingDeclaration, 
     Attributes = protector.Clone(original.Attributes);
   }
 
-  public virtual Statement WithProtections(Protector protector) => new Cloner().CloneStmt(this, false); //TODO: make abstract when all are implemented
+  public abstract Statement WithProtections(Protector protector);
 }

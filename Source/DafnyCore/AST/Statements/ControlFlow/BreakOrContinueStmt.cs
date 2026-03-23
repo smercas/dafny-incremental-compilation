@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using JetBrains.Annotations;
 
 namespace Microsoft.Dafny;
@@ -71,4 +72,11 @@ public class BreakOrContinueStmt : Statement, IHasReferences, ICloneable<BreakOr
         $"ghost-context {Kind} statement is not allowed to {Kind} out of non-ghost {targetKind}");
     }
   }
+
+  protected BreakOrContinueStmt(Protector protector, BreakOrContinueStmt original) : base(protector, original) {
+    TargetLabel = original.TargetLabel.ApplyIfNotNull(protector.Clone);
+    IsContinue = original.IsContinue;
+    BreakAndContinueCount = original.BreakAndContinueCount;
+  }
+  public override BreakOrContinueStmt WithProtections(Protector protector) => new(protector, this);
 }

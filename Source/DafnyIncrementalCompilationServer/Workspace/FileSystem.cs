@@ -19,13 +19,13 @@ namespace Microsoft.Dafny.IncrementalCompilation.Workspace {
       public ILogger<FileSystem> Logger { get; }
       public IReadOnlyCollection<Uri> URIs { get; }
       public string URIsAsString { get; }
-      
+
       public BaseFileSystem(ILogger<FileSystem> logger, IReadOnlyCollection<Uri> uris) {
         this.Logger = logger;
         this.URIs = uris;
         URIsAsString = $"[{string.Join(", ", URIs)}]";
       }
-      
+
       public bool Exists(Uri path) {
         if (URIs.Contains(path)) { return true; }
         Logger.LogWarning("couldn't find {} in existing files ({}), will check the disk", path, URIsAsString);
@@ -93,7 +93,7 @@ namespace Microsoft.Dafny.IncrementalCompilation.Workspace {
         // previously computed
         if (info.Cache.HasValue) { return info.Cache.Value; }
         // no modifications
-        if (info.Modifications is { HasValue: false} or { HasValue: true, Value.Count: 0 }) {
+        if (info.Modifications is { HasValue: false } or { HasValue: true, Value.Count: 0 }) {
           return ProcessBeforeReturn(string.Join(null, info.UnmodifiedContents));
         }
         var overwritesByLine = new Dictionary<int, string>();
@@ -138,7 +138,7 @@ namespace Microsoft.Dafny.IncrementalCompilation.Workspace {
     }
 
     public void ApplyModification(IncCompModifications modification) {
-      //TODO: this and the changes system at large
+      //IPMTODO: this and the changes system at large
     }
 
     public FileSnapshot ReadFile(Uri uri) {

@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -58,4 +59,9 @@ public class ExpectStmt : PredicateStmt, ICloneable<ExpectStmt>, ICanFormat {
       ExpressionTester.CheckIsCompilable(resolver, reporter, Message, codeContext);
     }
   }
+
+  protected ExpectStmt(Protector protector, ExpectStmt original) : base(protector, original) {
+    Message = original.Message?.WithProtections(protector); // from what I understand this should be a string literal and result in a copy
+  }
+  public override ExpectStmt WithProtections(Protector protector) => new(protector, this);
 }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using DafnyCore.IncrementalCompilation;
 using Microsoft.Dafny.Auditor;
 
 namespace Microsoft.Dafny;
@@ -46,4 +47,7 @@ public class AssumeStmt : PredicateStmt, ICloneable<AssumeStmt>, ICanFormat {
     string proofContext, bool allowAssumptionVariables, bool inConstructorInitializationPhase) {
     IsGhost = true;
   }
+
+  protected AssumeStmt(Protector protector, AssumeStmt original) : base(protector, original) { }
+  public override AssumeStmt WithProtections(Protector protector) => new(protector, this);
 }

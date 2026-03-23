@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -47,4 +48,9 @@ public class ExprRhs : AssignmentRhs, ICloneable<ExprRhs> {
 
   public override IEnumerable<INode> Children => new[] { Expr };
   public override IEnumerable<INode> PreResolveChildren => PreResolveSubExpressions;
+
+  protected ExprRhs(Protector protector, ExprRhs original) : base(protector, original) {
+    Expr = original.Expr.WithProtections(protector);
+  }
+  public override ExprRhs WithProtections(Protector protector) => new(protector, this);
 }

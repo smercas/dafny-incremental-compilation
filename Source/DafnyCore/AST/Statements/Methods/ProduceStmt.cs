@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -84,4 +85,9 @@ public abstract class ProduceStmt : Statement {
     this.HiddenUpdate?.ResolveGhostness(resolver, reporter, mustBeErasable, codeContext, proofContext,
       allowAssumptionVariables, inConstructorInitializationPhase);
   }
+
+  protected ProduceStmt(Protector protector, ProduceStmt original) : base(protector, original) {
+    Rhss = original.Rhss?.ConvertAll(rhs => rhs.WithProtections(protector));
+  }
+  public abstract override ProduceStmt WithProtections(Protector protector);
 }

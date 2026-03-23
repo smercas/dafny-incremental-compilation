@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -70,4 +71,10 @@ public class BlockByProofStmt : Statement, ICanResolveNewAndOld, ICanPrint,
     Proof.SetIndent(indentBefore, formatter);
     return false;
   }
+
+  protected BlockByProofStmt(Protector protector, BlockByProofStmt original) : base(protector, original) {
+    Proof = original.Proof.WithProtections(protector);
+    Body = original.Body.WithProtections(protector);
+  }
+  public override BlockByProofStmt WithProtections(Protector protector) => new(protector, this);
 }

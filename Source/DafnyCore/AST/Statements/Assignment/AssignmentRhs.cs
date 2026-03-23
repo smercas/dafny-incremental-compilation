@@ -1,10 +1,11 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace Microsoft.Dafny;
 
-public abstract class AssignmentRhs : NodeWithOrigin, IAttributeBearingDeclaration {
+public abstract class AssignmentRhs : NodeWithOrigin, IAttributeBearingDeclaration, IProtectable<AssignmentRhs> {
   public Attributes? Attributes { get; set; }
 
   string IAttributeBearingDeclaration.WhatKind => "assignment right-hand-side";
@@ -12,6 +13,7 @@ public abstract class AssignmentRhs : NodeWithOrigin, IAttributeBearingDeclarati
   public bool HasAttributes() {
     return Attributes != null;
   }
+
 
   internal AssignmentRhs(Cloner cloner, AssignmentRhs original) : base(cloner, original) {
     Attributes = cloner.CloneAttributes(original.Attributes);
@@ -66,4 +68,9 @@ public abstract class AssignmentRhs : NodeWithOrigin, IAttributeBearingDeclarati
   }
 
   public virtual IEnumerable<Statement> PreResolveSubStatements => SubStatements;
+
+  protected AssignmentRhs(Protector protector, AssignmentRhs original) : base(protector, original) {
+    Attributes = protector.Clone(original.Attributes);
+  }
+  public abstract AssignmentRhs WithProtections(Protector protector);
 }

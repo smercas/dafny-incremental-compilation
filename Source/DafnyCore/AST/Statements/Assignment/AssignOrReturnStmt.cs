@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -355,4 +356,11 @@ public class AssignOrReturnStmt : ConcreteAssignStatement, ICloneable<AssignOrRe
       proofContext, allowAssumptionVariables, inConstructorInitializationPhase));
     IsGhost = ResolvedStatements.All(ss => ss.IsGhost);
   }
+
+  protected AssignOrReturnStmt(Protector protector, AssignOrReturnStmt original) : base(protector, original) {
+    Rhs = original.Rhs.WithProtections(protector);
+    Rhss = original.Rhss.ConvertAll(rhs => rhs.WithProtections(protector));
+    KeywordToken = protector.Clone(original.KeywordToken);
+  }
+  public override AssignOrReturnStmt WithProtections(Protector protector) => new(protector, this);
 }

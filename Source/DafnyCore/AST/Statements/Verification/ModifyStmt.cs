@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -93,4 +94,10 @@ public class ModifyStmt : Statement, ICloneable<ModifyStmt>, ICanFormat {
         inConstructorInitializationPhase);
     }
   }
+
+  protected ModifyStmt(Protector protector, ModifyStmt original) : base(protector, original) {
+    Mod = original.Mod.WithProtections(protector);
+    Body = original.Body.WithProtections(protector);
+  }
+  public override ModifyStmt WithProtections(Protector protector) => new(protector, this);
 }

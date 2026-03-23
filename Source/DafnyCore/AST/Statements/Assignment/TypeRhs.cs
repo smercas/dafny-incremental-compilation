@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -25,4 +26,7 @@ public abstract class TypeRhs : AssignmentRhs {
 
 
   public override IEnumerable<Statement> PreResolveSubStatements => [];
+
+  protected TypeRhs(Protector protector, TypeRhs original) : base(protector, original) { }
+  public abstract override AssignmentRhs WithProtections(Protector protector);
 }

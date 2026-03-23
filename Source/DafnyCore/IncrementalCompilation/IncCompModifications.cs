@@ -20,7 +20,7 @@ public abstract class ChangeKind;
 public sealed class WF : ChangeKind;
 public sealed class ProofHint : ChangeKind;
 public abstract class Change(Uri uri, Range range) {
-  public static Comparer<Change> Comparer { get; } = Comparer<Change>.Create(static (l, r) => { // TODO: revisit when testing
+  public static Comparer<Change> Comparer { get; } = Comparer<Change>.Create(static (l, r) => { // IPMTODO: revisit when testing
     static bool Consecutive(Position first, params Position[] positions) =>
       positions.SkipLast(1).Zip(positions.Skip(1)).All(p => p.First <= p.Second);
     var (ls, le) = (l.Range.Start, l.Range.End);

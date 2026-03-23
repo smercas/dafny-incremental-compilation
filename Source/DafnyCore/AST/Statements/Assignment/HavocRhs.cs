@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -22,4 +23,7 @@ public class HavocRhs : AssignmentRhs, ICloneable<HavocRhs> {
       resolver.Reporter.Error(MessageSource.Resolver, GeneratorErrors.ErrorId.c_nondeterminism_forbidden, Origin, "nondeterministic assignment forbidden by the --enforce-determinism option");
     }
   }
+
+  protected HavocRhs(Protector protector, HavocRhs original) : base(protector, original) { }
+  public override HavocRhs WithProtections(Protector protector) => new(protector, this);
 }

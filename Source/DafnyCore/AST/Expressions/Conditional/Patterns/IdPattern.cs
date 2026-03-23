@@ -196,7 +196,19 @@ public class IdPattern : ExtendedPattern, IHasReferences {
     Id = original.Id;
     Arguments = original.Arguments?.ConvertAll(a => a.WithProtections(protector));
     HasParenthesis = original.HasParenthesis;
-    SyntacticType = protector.Clone(original.SyntacticType); // TODO: see what are the implications of cloning this instead of copying
+    SyntacticType = protector.Clone(original.SyntacticType); // IPMTODO: see what are the implications of cloning this instead of copying
   }
   public override IdPattern WithProtections(Protector protector) => new(protector, this);
+
+  protected internal override IEnumerable<string> ToBeProtectedUnfiltered {
+    get {
+      if (Arguments is null) {
+        yield return Id;
+      } else {
+        foreach (var argument in Arguments) {
+          foreach (var trans in argument.ToBeProtectedUnfiltered) { yield return trans; }
+        }
+      }
+    }
+  }
 }

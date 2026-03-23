@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -121,4 +122,10 @@ public class AlternativeStmt : LabeledStatement, ICloneable<AlternativeStmt>, IC
       }
     }
   }
+
+  protected AlternativeStmt(Protector protector, AlternativeStmt original) : base(protector, original) {
+    Alternatives = original.Alternatives.ConvertAll(a => a.WithProtections(protector));
+    UsesOptionalBraces = original.UsesOptionalBraces;
+  }
+  public override AlternativeStmt WithProtections(Protector protector) => new(protector, this);
 }

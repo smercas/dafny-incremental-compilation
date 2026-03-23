@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -90,4 +91,11 @@ public class SkeletonStatement : Statement, ICloneable<SkeletonStatement>, ICanF
       IsGhost = IsGhost || S.IsGhost;
     }
   }
+
+  protected SkeletonStatement(Protector protector, SkeletonStatement original) : base(protector, original) {
+    S = original.S?.WithProtections(protector);
+    ConditionEllipsis = original.ConditionEllipsis.ApplyIfNotNull(protector.Clone);
+    BodyEllipsis = original.BodyEllipsis.ApplyIfNotNull(protector.Clone);
+  }
+  public override SkeletonStatement WithProtections(Protector protector) => new(protector, this);
 }

@@ -49,10 +49,8 @@ public class NestedMatchCaseExpr : NestedMatchCase, IAttributeBearingDeclaration
   }
 
   protected NestedMatchCaseExpr(Protector protector, NestedMatchCaseExpr original) : base(protector, original) {
-    Body = original.Body.WithProtections(protector); // TODO: prepend protections
+    Body = original.Body.WithProtections(protector); // IPMTODO: prepend protections
     Attributes = protector.Clone(original.Attributes);
   }
-  public override NestedMatchCaseExpr WithProtections(Protector protector) {
-    throw new System.NotImplementedException();
-  }
+  public override NestedMatchCaseExpr WithProtections(Protector protector) => new(protector, this);
 }

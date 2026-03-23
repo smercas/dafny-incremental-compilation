@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -221,4 +222,6 @@ public class SingleAssignStmt : Statement, ICloneable<SingleAssignStmt> {
       }
     }
   }
+
+  public override SingleAssignStmt WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
 }

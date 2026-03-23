@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -17,4 +18,7 @@ public class YieldStmt : ProduceStmt, ICloneable<YieldStmt>, ICanFormat {
   public bool SetIndent(int indentBefore, TokenNewIndentCollector formatter) {
     return formatter.SetIndentAssertLikeStatement(this, indentBefore);
   }
+
+  protected YieldStmt(Protector protector, YieldStmt original) : base(protector, original) { }
+  public override YieldStmt WithProtections(Protector protector) => new(protector, this);
 }

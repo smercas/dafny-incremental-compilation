@@ -29,7 +29,7 @@ namespace Microsoft.Dafny.LanguageServer {
     protected abstract static string ServerKind { get; }
     public abstract static IEnumerable<Option> Options { get; }
 
-    // TODO: make this virtual when default implementation can be referenced in classes implementing this
+    // IPMTODO: make this virtual when default implementation can be referenced in classes implementing this
     public static void ConfigureDafnyOptionsForServer(DafnyOptions dafnyOptions) { }
 
     public static abstract Task Start(DafnyOptions dafnyOptions);

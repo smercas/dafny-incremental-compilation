@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using Microsoft.Dafny.Auditor;
 
 namespace Microsoft.Dafny;
@@ -184,4 +186,15 @@ public class ForallStmt : Statement, ICloneable<ForallStmt>, ICanFormat {
       ExpressionTester.CheckIsCompilable(resolver, reporter, Range, codeContext);
     }
   }
+
+  protected ForallStmt(Protector protector, ForallStmt original) : base(protector, original) {
+    BoundVars = original.BoundVars.ConvertAll(bv => bv.WithProtections(protector));
+    Range = original.Range.WithProtections(protector);
+    Ens = original.Ens.ConvertAll(e => e.WithProtections(protector, AttributedExpression.Kind.Ensures));
+    Body = original.Body switch {
+      BlockStmt blockStmt => blockStmt.WithProtections(protector, original.BoundVars.Select(bv => bv.ToProtectAssertion())),
+      _ => throw new UnreachableException("constructor usage indicates that this can only be a `BlockStmt`"),
+    };
+  }
+  public override ForallStmt WithProtections(Protector protector) => new(protector, this);
 }

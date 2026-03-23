@@ -25,7 +25,7 @@ namespace Microsoft.Dafny.IncrementalCompilation {
       }.Concat(DafnyCommands.VerificationOptions).
       Concat(DafnyCommands.ResolverOptions);
 
-    // TODO: remove this when static virtual works in this case
+    // IPMTODO: remove this when static virtual works in this case
     public static void ConfigureDafnyOptionsForServer(DafnyOptions dafnyOptions) => IServer<Server>.ConfigureDafnyOptionsForServer(dafnyOptions);
 
     public static async Task Start(DafnyOptions dafnyOptions) {
@@ -57,7 +57,8 @@ namespace Microsoft.Dafny.IncrementalCompilation {
         await using var logWriter = new IServer<Server>.LogWriter();
         Console.SetOut(logWriter);
         await host.RunAsync();
-      } finally {
+      }
+      finally {
         await Log.CloseAndFlushAsync();
       }
     }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using Microsoft.Dafny.Auditor;
 
 namespace Microsoft.Dafny;
@@ -92,4 +93,11 @@ public abstract class OneBodyLoopStmt : LoopStmt {
     reporter.Warning(MessageSource.Resolver, "", Origin, text);
   }
 
+  protected OneBodyLoopStmt(Protector protector, OneBodyLoopStmt original, IEnumerable<Statement>? additional = null) : base(protector, original) {
+    Body = original.Body?.Apply(b => additional switch {
+      null => b.WithProtections(protector),
+      not null => b.WithProtections(protector, additional)
+    });
+  }
+  public abstract override OneBodyLoopStmt WithProtections(Protector protector);
 }

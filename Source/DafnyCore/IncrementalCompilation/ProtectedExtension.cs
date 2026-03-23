@@ -450,12 +450,12 @@ namespace DafnyCore.IncrementalCompilation {
     public static MultiSelectExpr AsProtected(this MultiSelectExpr e) => new(e.Origin.Clone(), e.Array.AsProtected(), e.Indices.ConvertAll(AsProtected));
     public static SeqSelectExpr AsProtected(this SeqSelectExpr e) => new(e.Origin.Clone(), e.SelectOne, e.Seq.AsProtected(), e.E0?.AsProtected(), e.E1?.AsProtected(), e.CloseParen);
     public static ApplySuffix AsProtected(this ThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.OldProtect);
-    public static ApplySuffix AsProtected(this ImplicitThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.OldProtect); // TODO: check what this is
+    public static ApplySuffix AsProtected(this ImplicitThisExpr e) => e.Clone().WrappedWith(ProtectorFunctions.OldProtect); // IPMTODO: check what this is
     public static SeqDisplayExpr AsProtected(this SeqDisplayExpr e) => new(e.Origin.Clone(), e.Elements.ConvertAll(AsProtected));
     public static SetDisplayExpr AsProtected(this SetDisplayExpr e) => new(e.Origin.Clone(), e.Finite, e.Elements.ConvertAll(AsProtected));
     public static MultiSetDisplayExpr AsProtected(this MultiSetDisplayExpr e) => new(e.Origin.Clone(), e.Elements.ConvertAll(AsProtected));
     public static MapDisplayExpr AsProtected(this MapDisplayExpr e) => new(e.Origin.Clone(), e.Finite, e.Elements.ConvertAll(static entry => new MapDisplayEntry(entry.A.AsProtected(), entry.B.AsProtected())));
-    public static MultiSetFormingExpr AsProtected(this MultiSetFormingExpr e) => new(e.Origin.Clone(), e.E.Clone()); // TODO: check what this is
+    public static MultiSetFormingExpr AsProtected(this MultiSetFormingExpr e) => new(e.Origin.Clone(), e.E.Clone()); // IPMTODO: check what this is
     public static SeqConstructionExpr AsProtected(this SeqConstructionExpr e) => new(e.Origin.Clone(), e.ExplicitElementType.Clone(), e.N.AsProtected(), e.Initializer.AsProtected());
     public static SeqUpdateExpr AsProtected(this SeqUpdateExpr e) => new(e.Origin.Clone(), e.Seq.AsProtected(), e.Index.AsProtected(), e.Value.AsProtected());
     public static LambdaExpr AsProtected(this LambdaExpr e) => new(e.Origin.Clone(), e.BoundVars.ConvertAll(AsProtected), e.Range?.AsProtected(), e.Reads.AsProtected(), e.Term.AsProtected(), e.Attributes.Clone());
@@ -503,7 +503,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static FieldLocationExpression AsProtected(this FieldLocationExpression e) => new(e.Lhs.AsProtected(), e.Backtick, e.Name.Clone());
     public static IndexFieldLocationExpression AsProtected(this IndexFieldLocationExpression e) => new(e.Lhs.AsProtected(), e.OpenParen, e.Indices.ConvertAll(AsProtected), e.CloseParen);
     public static DatatypeUpdateExpr AsProtected(this DatatypeUpdateExpr e) => new(e.Origin.Clone(), e.Root.AsProtected(), e.Updates.ConvertAll(static t => Tuple.Create(t.Item1, t.Item2, t.Item3.AsProtected())));
-    public static ChainingExpression AsProtected(this ChainingExpression e) => new(e.Origin.Clone(), e.Operands.ConvertAll(AsProtected), e.Operators, e.OperatorLocs.ConvertAll(Clone), e.PrefixLimits.ConvertAll(static e => e?.AsProtected())); // TODO: shallow-copy Operators?
+    public static ChainingExpression AsProtected(this ChainingExpression e) => new(e.Origin.Clone(), e.Operands.ConvertAll(AsProtected), e.Operators, e.OperatorLocs.ConvertAll(Clone), e.PrefixLimits.ConvertAll(static e => e?.AsProtected())); // IPMTODO: shallow-copy Operators?
     public static ParensExpression AsProtected(this ParensExpression e) => new(e.Origin.Clone(), e.E.AsProtected());
     public static LetOrFailExpr AsProtected(this LetOrFailExpr e) => new(e.Origin.Clone(), e.Lhs?.AsProtected(), e.Rhs.AsProtected(), e.Body.AsProtected());
     public static NegationExpression AsProtected(this NegationExpression e) => new(e.Origin.Clone(), e.E.AsProtected());

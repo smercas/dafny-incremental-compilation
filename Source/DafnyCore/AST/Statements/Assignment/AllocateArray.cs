@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -97,4 +98,13 @@ public class AllocateArray : TypeRhs, ICloneable<AllocateArray> {
       .Concat(ArrayDimensions)
       .Concat(ElementInit != null ? new[] { ElementInit } : Enumerable.Empty<Node>())
       .Concat(InitDisplay ?? Enumerable.Empty<Node>());
+
+  protected AllocateArray(Protector protector, AllocateArray original) : base(protector, original) {
+    ExplicitType = protector.Clone(original.ExplicitType);
+    ElementType = protector.Clone(original.ElementType);
+    InitDisplay = original.InitDisplay?.ConvertAll(id => id.WithProtections(protector));
+    ArrayDimensions = original.ArrayDimensions.ConvertAll(ad => ad.WithProtections(protector));
+    ElementInit = original.ElementInit?.WithProtections(protector);
+  }
+  public override AllocateArray WithProtections(Protector protector) => new(protector, this);
 }

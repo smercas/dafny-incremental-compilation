@@ -1,3 +1,5 @@
+using DafnyCore.IncrementalCompilation;
+using System;
 using System.Diagnostics.Contracts;
 
 namespace Microsoft.Dafny;
@@ -41,5 +43,15 @@ public class TryRecoverStatement : Statement, ICloneable<TryRecoverStatement> {
   public override void ResolveGhostness(ModuleResolver resolver, ErrorReporter reporter, bool mustBeErasable, ICodeContext codeContext,
     string proofContext, bool allowAssumptionVariables, bool inConstructorInitializationPhase) {
     throw new System.NotSupportedException("This type is only created after resolution");
+  }
+
+  protected TryRecoverStatement(Protector protector, TryRecoverStatement original) : base(protector, original) {
+    TryBody = original.TryBody.WithProtections(protector);
+    RecoverBody = original.RecoverBody.WithProtections(protector);
+    HaltMessageVar = original.HaltMessageVar.WithProtections(protector);
+  }
+  public override TryRecoverStatement WithProtections(Protector protector) {
+    Console.WriteLine($"{GetType()} shouldn't be present in the AST");
+    return new(protector, this);
   }
 }

@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -44,4 +45,9 @@ public abstract class ConcreteAssignStatement : Statement, ICanFormat {
 
     base.GenResolve(resolver, context);
   }
+
+  protected ConcreteAssignStatement(Protector protector, ConcreteAssignStatement original) : base(protector, original) {
+    Lhss = original.Lhss.ConvertAll(l => l.WithProtections(protector));
+  }
+  public abstract override ConcreteAssignStatement WithProtections(Protector protector);
 }

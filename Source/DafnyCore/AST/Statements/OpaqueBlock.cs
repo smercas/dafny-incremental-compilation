@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -60,5 +61,10 @@ public class OpaqueBlock : BlockStmt, ICanResolveNewAndOld, ICloneable<OpaqueBlo
 
   public new OpaqueBlock Clone(Cloner cloner) {
     return new OpaqueBlock(cloner, this);
+  }
+
+  protected OpaqueBlock(Protector protector, OpaqueBlock original) : base(protector, original, null) {
+    Ensures = original.Ensures.ConvertAll(e => e.WithProtections(protector, AttributedExpression.Kind.Ensures));
+    Modifies = original.Modifies.WithProtections(protector);
   }
 }

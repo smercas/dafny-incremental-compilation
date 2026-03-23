@@ -42,7 +42,7 @@ public class AttributedExpression : NodeWithOrigin, IAttributeBearingDeclaration
     Attributes = attributes;
   }
 
-  public enum Kind { Ensures };
+  public enum Kind { Ensures, Invariant };
   public AttributedExpression WithProtections(Protector protector) => WithProtections(protector, null);
   public AttributedExpression WithProtections(Protector protector, Kind? kind) {
     AttributedExpression CreateFrom(Expression E) => new(E, Label.ApplyIfNotNull(protector.Clone), protector.Clone(Attributes));

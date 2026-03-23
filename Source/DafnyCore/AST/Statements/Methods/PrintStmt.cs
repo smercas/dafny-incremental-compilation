@@ -5,6 +5,7 @@ using System.CommandLine;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using DafnyCore;
+using DafnyCore.IncrementalCompilation;
 using DafnyCore.Options;
 
 namespace Microsoft.Dafny;
@@ -58,4 +59,9 @@ public class PrintStmt : Statement, ICloneable<PrintStmt>, ICanFormat {
       Args.ForEach(ee => ExpressionTester.CheckIsCompilable(resolver, reporter, ee, codeContext));
     }
   }
+
+  protected PrintStmt(Protector protector, PrintStmt original) : base(protector, original) {
+    Args = original.Args.ConvertAll(a => a.WithProtections(protector));
+  }
+  public override PrintStmt WithProtections(Protector protector) => new(protector, this);
 }

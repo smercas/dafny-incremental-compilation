@@ -1,6 +1,7 @@
 #nullable enable
 using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Microsoft.Dafny;
 
@@ -40,6 +41,7 @@ public class Method : MethodOrConstructor {
     Outs = original.Outs.ConvertAll(o => o.WithProtections(protector));
     HasStaticKeyword = original.HasStaticKeyword;
     IsByMethod = original.IsByMethod;
+    Ens.InsertRange(0, original.Outs.Select(ProtectorExtensions.ToProtectClause));
   }
   public override Method WithProtections(Protector protector) =>
     protector.WithMemberAdditionalContext(() => new Method(protector, this));

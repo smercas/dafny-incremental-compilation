@@ -596,9 +596,9 @@ experimentalPredicateAlwaysGhost - Compiled functions are written `function`. Gh
     IsFueled = original.IsFueled;
     Result = original.Result?.WithProtections(protector);
     ResultType = protector.Clone(original.ResultType);
-    Body = Body?.WithProtections(protector);
-    ByMethodTok = ByMethodTok?.ApplyIfNotNull(protector.Clone);
-    ByMethodBody = ByMethodBody?.WithProtections(protector);
+    Body = original.Body?.WithProtections(protector);
+    ByMethodTok = original.ByMethodTok?.ApplyIfNotNull(protector.Clone);
+    ByMethodBody = original.ByMethodBody?.WithProtections(protector);
     IsOpaque = original.IsOpaque;
     HasStaticKeyword = original.HasStaticKeyword;
   }

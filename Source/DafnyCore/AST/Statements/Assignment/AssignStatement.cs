@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -195,4 +196,10 @@ public class AssignStatement : ConcreteAssignStatement, ICloneable<AssignStateme
       proofContext, allowAssumptionVariables, inConstructorInitializationPhase));
     IsGhost = ResolvedStatements.All(ss => ss.IsGhost);
   }
+
+  protected AssignStatement(Protector protector, AssignStatement original) : base(protector, original) {
+    Rhss = original.Rhss.ConvertAll(rhs => rhs.WithProtections(protector));
+    CanMutateKnownState = original.CanMutateKnownState;
+  }
+  public override AssignStatement WithProtections(Protector protector) => new(protector, this);
 }

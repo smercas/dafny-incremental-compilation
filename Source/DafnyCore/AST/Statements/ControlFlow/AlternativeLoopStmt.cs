@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -118,4 +119,10 @@ public class AlternativeLoopStmt : LoopStmt, ICloneable<AlternativeLoopStmt>, IC
       }
     }
   }
+
+  protected AlternativeLoopStmt(Protector protector, AlternativeLoopStmt original) : base(protector, original) {
+    Alternatives = original.Alternatives.ConvertAll(a => a.WithProtections(protector));
+    UsesOptionalBraces = original.UsesOptionalBraces;
+  }
+  public override AlternativeLoopStmt WithProtections(Protector protector) => new(protector, this);
 }
