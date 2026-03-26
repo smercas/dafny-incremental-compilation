@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -29,4 +30,9 @@ public abstract class UnaryExpr : Expression, ICanFormat {
   public bool SetIndent(int indentBefore, TokenNewIndentCollector formatter) {
     return formatter.SetIndentParensExpression(indentBefore, OwnedTokens);
   }
+
+  protected UnaryExpr(Protector protector, UnaryExpr original) : base(protector, original) {
+    E = original.E.WithProtections(protector);
+  }
+  public abstract override UnaryExpr WithProtections(Protector protector);
 }

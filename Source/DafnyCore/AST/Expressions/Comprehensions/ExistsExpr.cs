@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -60,4 +61,7 @@ public class ExistsExpr : QuantifierExpr, ICloneable<ExistsExpr> {
     };
     return ex;
   }
+
+  protected ExistsExpr(Protector protector, ExistsExpr original) : base(protector, original) { }
+  public override ExistsExpr WithProtections(Protector protector) => new(protector, this);
 }

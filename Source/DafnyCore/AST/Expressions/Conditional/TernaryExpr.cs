@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -39,4 +40,12 @@ public class TernaryExpr : Expression, ICloneable<TernaryExpr> {
   public TernaryExpr Clone(Cloner cloner) {
     return new TernaryExpr(cloner, this);
   }
+
+  protected TernaryExpr(Protector protector, TernaryExpr original) : base(protector, original) {
+    Op = original.Op;
+    E0 = original.E0.WithProtections(protector);
+    E1 = original.E1.WithProtections(protector);
+    E2 = original.E2.WithProtections(protector);
+  }
+  public override TernaryExpr WithProtections(Protector protector) => new(protector, this);
 }

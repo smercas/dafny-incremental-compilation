@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -77,4 +78,10 @@ public class DatatypeUpdateExpr : ConcreteSyntaxExpression, IHasReferences, IClo
       }
     }
   }
+
+  protected DatatypeUpdateExpr(Protector protector, DatatypeUpdateExpr original) : base(protector, original) {
+    Root = original.Root.WithProtections(protector);
+    Updates = original.Updates.ConvertAll(t => Tuple.Create(t.Item1, t.Item2, t.Item3.WithProtections(protector)));
+  }
+  public override DatatypeUpdateExpr WithProtections(Protector protector) => new(protector, this);
 }

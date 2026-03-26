@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -18,4 +19,7 @@ public class SeqDisplayExpr : DisplayExpression, ICanFormat, ICloneable<SeqDispl
   public SeqDisplayExpr Clone(Cloner cloner) {
     return new SeqDisplayExpr(cloner, this);
   }
+
+  protected SeqDisplayExpr(Protector protector, SeqDisplayExpr original) : base(protector, original) { }
+  public override SeqDisplayExpr WithProtections(Protector protector) => new(protector, this);
 }

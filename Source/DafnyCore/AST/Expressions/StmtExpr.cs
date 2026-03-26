@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -87,4 +88,10 @@ public class StmtExpr : Expression, ICanFormat, ICloneable<StmtExpr> {
   public StmtExpr Clone(Cloner cloner) {
     return new StmtExpr(cloner, this);
   }
+
+  protected StmtExpr(Protector protector, StmtExpr original) : base(protector, original) {
+    E = original.E.WithProtections(protector);
+    S = original.S.WithProtections(protector);
+  }
+  public override StmtExpr WithProtections(Protector protector) => new(protector, this);
 }

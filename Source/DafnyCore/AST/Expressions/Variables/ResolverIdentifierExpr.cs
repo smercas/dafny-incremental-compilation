@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -82,4 +83,6 @@ class ResolverIdentifierExpr : Expression, IHasReferences, ICloneable<ResolverId
   public ResolverIdentifierExpr Clone(Cloner cloner) {
     return new ResolverIdentifierExpr(cloner, this);
   }
+
+  public override ResolverIdentifierExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

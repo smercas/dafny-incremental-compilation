@@ -50,6 +50,7 @@ public class AttributedExpression : NodeWithOrigin, IAttributeBearingDeclaration
       Kind.Ensures when Attributes.Contains(Attributes, Constants.AttributeName) =>
         protector.WithAttributeAdditionalContext(() => CreateFrom(
           E.WrappedWith(ProtectorFunctions.ProtectToProve with {
+            Protector = protector,
             ChangeContext = new ProtectToProveApplySuffix.ChangeContext(protector.MostRecentContext),
           })
         )),

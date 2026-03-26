@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -112,4 +113,9 @@ public abstract class QuantifierExpr : ComprehensionExpr, TypeParameter.ParentTy
       }
     }
   }
+
+  protected QuantifierExpr(Protector protector, QuantifierExpr original) : base(protector, original) {
+    UniqueId = FreshQuantId();
+  }
+  public abstract override QuantifierExpr WithProtections(Protector protector);
 }

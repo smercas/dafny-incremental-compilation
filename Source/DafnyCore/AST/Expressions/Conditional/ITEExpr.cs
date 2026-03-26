@@ -1,5 +1,7 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using System.Linq;
 
 namespace Microsoft.Dafny;
 
@@ -119,4 +121,12 @@ public class ITEExpr : Expression, ICanFormat, ICloneable<ITEExpr> {
   public ITEExpr Clone(Cloner cloner) {
     return new ITEExpr(cloner, this);
   }
+
+  protected ITEExpr(Protector protector, ITEExpr original) : base(protector, original) {
+    IsBindingGuard = original.IsBindingGuard;
+    Test = original.Test.WithProtections(protector);
+    Thn = original.Thn.WithProtections(protector); // if `IsBindingGuard` is true then `Thn` is a `LetExpr` and already protects the bindings
+    Els = original.Els?.WithProtections(protector);
+  }
+  public override ITEExpr WithProtections(Protector protector) => new(protector, this);
 }

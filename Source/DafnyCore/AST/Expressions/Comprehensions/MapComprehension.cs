@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -68,4 +69,10 @@ public class MapComprehension : ComprehensionExpr, ICloneable<MapComprehension> 
       yield return Term;
     }
   }
+
+  protected MapComprehension(Protector protector, MapComprehension original) : base(protector, original) {
+    TermLeft = original.TermLeft?.WithProtections(protector);
+    Finite = original.Finite;
+  }
+  public override MapComprehension WithProtections(Protector protector) => new(protector, this);
 }

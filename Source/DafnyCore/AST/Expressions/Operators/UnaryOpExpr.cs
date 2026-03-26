@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Diagnostics.Contracts;
 
 namespace Microsoft.Dafny;
@@ -79,4 +80,9 @@ public class UnaryOpExpr : UnaryExpr, ICloneable<UnaryOpExpr> {
   public UnaryOpExpr Clone(Cloner cloner) {
     return new UnaryOpExpr(cloner, this);
   }
+
+  protected UnaryOpExpr(Protector protector, UnaryOpExpr original) : base(protector, original) {
+    Op = original.Op;
+  }
+  public override UnaryOpExpr WithProtections(Protector protector) => new(protector, this);
 }

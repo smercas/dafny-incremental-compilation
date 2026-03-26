@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -70,4 +71,9 @@ public abstract class SuffixExpr : ConcreteSyntaxExpression {
       yield return Lhs;
     }
   }
+
+  protected SuffixExpr(Protector protector, SuffixExpr original) : base(protector, original) {
+    Lhs = original.Lhs.WithProtections(protector);
+  }
+  public abstract override SuffixExpr WithProtections(Protector protector);
 }

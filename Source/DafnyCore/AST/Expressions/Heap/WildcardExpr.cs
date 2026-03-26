@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Diagnostics.Contracts;
 
 namespace Microsoft.Dafny;
@@ -15,4 +16,7 @@ public class WildcardExpr : Expression, ICloneable<WildcardExpr> {  // a Wildcar
   public WildcardExpr Clone(Cloner cloner) {
     return new WildcardExpr(cloner, this);
   }
+
+  protected WildcardExpr(Protector protector, WildcardExpr original) : base(protector, original) { }
+  public override WildcardExpr WithProtections(Protector protector) => new(protector, this);
 }

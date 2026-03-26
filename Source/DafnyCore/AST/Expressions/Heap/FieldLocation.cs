@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.Contracts;
+﻿using DafnyCore.IncrementalCompilation;
+using System.Diagnostics.Contracts;
 
 namespace Microsoft.Dafny;
 
@@ -29,4 +30,6 @@ public class FieldLocation : Expression, ICloneable<FieldLocation> {
   public FieldLocation Clone(Cloner cloner) {
     return new FieldLocation(cloner, this);
   }
+
+  public override FieldLocation WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

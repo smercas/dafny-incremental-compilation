@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Numerics;
+using DafnyCore.IncrementalCompilation;
 using Microsoft.BaseTypes;
 
 namespace Microsoft.Dafny;
@@ -120,6 +121,11 @@ public class LiteralExpr : Expression, ICloneable<LiteralExpr> {
   public LiteralExpr Clone(Cloner cloner) {
     return new LiteralExpr(cloner, this);
   }
+
+  protected LiteralExpr(Protector protector, LiteralExpr original) : base(protector, original) {
+    Value = original.Value;
+  }
+  public override LiteralExpr WithProtections(Protector protector) => new(protector, this);
 }
 
 public class CharLiteralExpr : LiteralExpr, ICloneable<CharLiteralExpr> {
@@ -144,6 +150,9 @@ public class CharLiteralExpr : LiteralExpr, ICloneable<CharLiteralExpr> {
   public new CharLiteralExpr Clone(Cloner cloner) {
     return new CharLiteralExpr(cloner, this);
   }
+
+  protected CharLiteralExpr(Protector protector, CharLiteralExpr original) : base(protector, original) { }
+  public override CharLiteralExpr WithProtections(Protector protector) => new(protector, this);
 }
 
 public class DecimalLiteralExpr : LiteralExpr, ICloneable<DecimalLiteralExpr> {
@@ -171,6 +180,9 @@ public class DecimalLiteralExpr : LiteralExpr, ICloneable<DecimalLiteralExpr> {
   public new DecimalLiteralExpr Clone(Cloner cloner) {
     return new DecimalLiteralExpr(cloner, this);
   }
+
+  protected DecimalLiteralExpr(Protector protector, DecimalLiteralExpr original) : base(protector, original) { }
+  public override DecimalLiteralExpr WithProtections(Protector protector) => new(protector, this);
 }
 
 public class StringLiteralExpr : LiteralExpr, ICloneable<StringLiteralExpr> {
@@ -196,6 +208,11 @@ public class StringLiteralExpr : LiteralExpr, ICloneable<StringLiteralExpr> {
   public new StringLiteralExpr Clone(Cloner cloner) {
     return new StringLiteralExpr(cloner, this);
   }
+
+  protected StringLiteralExpr(Protector protector, StringLiteralExpr original) : base(protector, original) {
+    IsVerbatim = original.IsVerbatim;
+  }
+  public override StringLiteralExpr WithProtections(Protector protector) => new(protector, this);
 }
 
 /// <summary>
@@ -238,4 +255,9 @@ public class NegationExpression : ConcreteSyntaxExpression, ICloneable<NegationE
       yield return E;
     }
   }
+
+  protected NegationExpression(Protector protector, NegationExpression original) : base(protector, original) {
+    E = original.E.WithProtections(protector);
+  }
+  public override NegationExpression WithProtections(Protector protector) => new(protector, this);
 }

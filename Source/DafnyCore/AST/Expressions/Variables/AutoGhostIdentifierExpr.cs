@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -25,4 +26,7 @@ public class AutoGhostIdentifierExpr : IdentifierExpr, ICloneable<AutoGhostIdent
   public override IEnumerable<Reference> GetReferences() {
     return [];
   }
+
+  protected AutoGhostIdentifierExpr(Protector protector, AutoGhostIdentifierExpr original) : base(protector, original) { }
+  public override AutoGhostIdentifierExpr WithProtections(Protector protector) => new(protector, this);
 }

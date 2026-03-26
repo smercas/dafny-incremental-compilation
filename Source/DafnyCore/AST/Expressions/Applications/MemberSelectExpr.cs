@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -297,4 +298,6 @@ public class MemberSelectExpr : Expression, IHasReferences, ICloneable<MemberSel
   public IEnumerable<Reference> GetReferences() {
     return new[] { new Reference(ReportingRange, Member) };
   }
+
+  public override MemberSelectExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

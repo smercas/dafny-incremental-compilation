@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -91,4 +92,9 @@ public class LambdaExpr : ComprehensionExpr, ICloneable<LambdaExpr>, IFrameScope
   }
 
   public string Designator => "lambda";
+
+  protected LambdaExpr(Protector protector, LambdaExpr original) : base(protector, original) {
+    Reads = original.Reads.WithProtections(protector);
+  }
+  public override LambdaExpr WithProtections(Protector protector) => new(protector, this);
 }

@@ -24,5 +24,5 @@ public class PrefixPredicate : Function {
     ExtremePred = extremePred;
   }
 
-  public override PrefixPredicate WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
+  public override PrefixPredicate WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Diagnostics.Contracts;
 
 namespace Microsoft.Dafny;
@@ -41,6 +42,9 @@ public class ThisExpr : Expression, ICloneable<ThisExpr> {
   public ThisExpr Clone(Cloner cloner) {
     return new ThisExpr(cloner, this);
   }
+
+  protected ThisExpr(Protector protector, ThisExpr original) : base(protector, original) { }
+  public override ThisExpr WithProtections(Protector protector) => new(protector, this);
 }
 
 public class ImplicitThisExpr : ThisExpr, ICloneable<ImplicitThisExpr> {
@@ -59,6 +63,9 @@ public class ImplicitThisExpr : ThisExpr, ICloneable<ImplicitThisExpr> {
   public new ImplicitThisExpr Clone(Cloner cloner) {
     return new ImplicitThisExpr(cloner, this);
   }
+
+  protected ImplicitThisExpr(Protector protector, ImplicitThisExpr original) : base(protector, original) { }
+  public override ImplicitThisExpr WithProtections(Protector protector) => new(protector, this);
 }
 
 /// <summary>
@@ -79,4 +86,6 @@ public class ImplicitThisExprConstructorCall : ImplicitThisExpr, ICloneable<Impl
   public new ImplicitThisExprConstructorCall Clone(Cloner cloner) {
     return new ImplicitThisExprConstructorCall(cloner, this);
   }
+
+  public override ImplicitThisExprConstructorCall WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

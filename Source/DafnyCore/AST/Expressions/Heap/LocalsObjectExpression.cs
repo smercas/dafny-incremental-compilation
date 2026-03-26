@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using DafnyCore.IncrementalCompilation;
+using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
 
@@ -20,4 +21,7 @@ public class LocalsObjectExpression : Expression, ICloneable<LocalsObjectExpress
     return new LocalsObjectExpression(cloner, this);
   }
   public override IEnumerable<Expression> SubExpressions => [];
+
+  protected LocalsObjectExpression(Protector protector, LocalsObjectExpression original) : base(protector, original) { }
+  public override LocalsObjectExpression WithProtections(Protector protector) => new(protector, this);
 }

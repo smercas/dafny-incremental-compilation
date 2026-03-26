@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -136,4 +137,13 @@ public class LetExpr : Expression, IAttributeBearingDeclaration, IBoundVarsBeari
   public bool SetIndent(int indentBefore, TokenNewIndentCollector formatter) {
     return formatter.SetIndentVarDeclStmt(indentBefore, OwnedTokens, false, true);
   }
+
+  protected LetExpr(Protector protector, LetExpr original) : base(protector, original) {
+    LHSs = original.LHSs.ConvertAll(lhs => lhs.WithProtections(protector));
+    RHSs = original.RHSs.ConvertAll(lhs => lhs.WithProtections(protector));
+    Body = original.Body.WithProtections(protector).WithPrependedAssertionsIfAny(original.LHSs.Select(lhs => lhs.Var!.ToProtectAssertion()));
+    Exact = original.Exact;
+    Attributes = protector.Clone(original.Attributes);
+  }
+  public override LetExpr WithProtections(Protector protector) => new(protector, this);
 }

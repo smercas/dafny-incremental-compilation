@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -25,4 +26,9 @@ public abstract class TypeUnaryExpr : UnaryExpr {
       yield return ToType;
     }
   }
+
+  protected TypeUnaryExpr(Protector protector, TypeUnaryExpr original) : base(protector, original) {
+    ToType = protector.Clone(original.ToType);
+  }
+  public abstract override TypeUnaryExpr WithProtections(Protector protector);
 }

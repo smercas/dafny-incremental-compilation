@@ -36,7 +36,7 @@ namespace DafnyCore.IncrementalCompilation {
           case (EnsuresWFChange ensuresWFChange, [AttributedExpression attributedExpression, ..]):
             ensuresWFChange.Update(memberDecl, attributedExpression);
             break;
-          default: throw new UnreachableException();
+          default: throw new UnreachableException(); //IPMTODO: from prior debugging, these were hit
         }
         switch (Changes[idx].ProofHint, attributeBearingDeclaration, memberDecl) {
           case (AssertWithByProofHintChange assertWithByProofHintChange, [AssertStmt assertStmt, BlockByProofStmt blockByProofStmt, ..], _) when ReferenceEquals(blockByProofStmt.Body, assertStmt):
@@ -51,7 +51,7 @@ namespace DafnyCore.IncrementalCompilation {
           case (MethodOrConstructorEnsuresProofHintChange methodOrConstructorEnsuresProofHintChange, [AttributedExpression attributedExpression, ..], MethodOrConstructor methodOrConstructor):
             methodOrConstructorEnsuresProofHintChange.Update(methodOrConstructor, attributedExpression);
             break;
-          default: throw new UnreachableException();
+          default: throw new UnreachableException(); //IPMTODO: from prior debugging, these were hit
         }
       }
       ResetChangedModulesLazy();
@@ -67,18 +67,18 @@ namespace DafnyCore.IncrementalCompilation {
     }
     private static Dictionary<ProtectToProveApplySuffix, ChangeContext> ChangeContexts { get; set; } = [];
     // these change objects can be computed once and updated with relevant information
-    private static Lazy<List<(Change<WF>, Change<ProofHint>)>> changes { get; set; } = new(() => [..Instances.Select(i => ChangeContexts[i].Evaluated).Select(cc => (
+    private static Lazy<List<(Change<WF>, Change<ProofHint>)>> changes { get; set; } = new(() => [.. Instances.Select(i => ChangeContexts[i].Evaluated).Select(cc => (
       cc.AttributeBearingDeclarations switch {
         [AssertStmt assertStmt, ..] => new AssertWFChange(cc.MemberDecl, assertStmt) as Change<WF>,
         [AttributedExpression attributedExpression, ..] => new EnsuresWFChange(cc.MemberDecl, attributedExpression),
-        _ => throw new NotImplementedException(),
+        _ => throw new NotImplementedException(), //IPMTODO: from prior debugging, these were hit
       },
       (cc.AttributeBearingDeclarations, cc.MemberDecl) switch {
         ([AssertStmt assertStmt, BlockByProofStmt blockByProofStmt, ..], _) when ReferenceEquals(blockByProofStmt.Body, assertStmt) => new AssertWithByProofHintChange(cc.MemberDecl, blockByProofStmt) as Change<ProofHint>,
         ([AssertStmt assertStmt, ..], _) => new AssertWithoutByProofHintChange(cc.MemberDecl, assertStmt),
         ([AttributedExpression attributedExpression, ..], Function function) => new FunctionEnsuresProofHintChange(function, attributedExpression),
         ([AttributedExpression attributedExpression, ..], MethodOrConstructor methodOrConstructor) => new MethodOrConstructorEnsuresProofHintChange(methodOrConstructor),
-        (_, _) => throw new NotImplementedException(),
+        (_, _) => throw new NotImplementedException(), //IPMTODO: from prior debugging, these were hit
       }
     ))]);
     public static IEnumerable<(string?, string?)> ChangeTexts {
@@ -115,10 +115,10 @@ namespace DafnyCore.IncrementalCompilation {
 
     public ProtectToProveApplySuffix(Expression e, Protector protector, ChangeContext changeContext) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
         new(null, e.WithProtections(protector)),
-        new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
-        new(null, PlaceholderScope),
-        new(null, PlaceholderId),
-      ], Token.NoToken
+      new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
+      new(null, PlaceholderScope),
+      new(null, PlaceholderId),
+    ], Token.NoToken
     ) {
       Contract.Ensures(IsValidPreResolve);
       instances.Add(this);
@@ -126,10 +126,10 @@ namespace DafnyCore.IncrementalCompilation {
     }
     public ProtectToProveApplySuffix(Expression e, Protector protector, BigInteger immediateOrder) : base(e.Origin, null, ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
         new(null, e.WithProtections(protector)),
-        new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
-        new(null, PlaceholderScope),
-        new(null, new LiteralExpr(SourceOrigin.NoToken, immediateOrder)),
-      ], Token.NoToken
+      new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
+      new(null, PlaceholderScope),
+      new(null, new LiteralExpr(SourceOrigin.NoToken, immediateOrder)),
+    ], Token.NoToken
     ) {
       Contract.Ensures(IsValidPreResolve);
     }
@@ -152,5 +152,7 @@ namespace DafnyCore.IncrementalCompilation {
       Bindings.ArgumentBindings.First(ab => ReferenceEquals(ab.Actual, PlaceholderScope)).Actual = new SeqDisplayExpr(SourceOrigin.NoToken, [.. resolver.ScopeArgsFrom(context)]);
       //System.Console.WriteLine('[' + string.Join(", ", Seq.Elements) + ']');
     }
+
+    public override ProtectToProveApplySuffix WithProtections(Protector protector) => throw new UnreachableException($"Due to the nature of the protection applied over the AST, no part of the AST should be processed more than once; this expression signals that a part of the AST ({this}) is to be processed at least twice");
   }
 }

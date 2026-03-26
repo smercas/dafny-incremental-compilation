@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -126,4 +127,13 @@ public class ChainingExpression : ConcreteSyntaxExpression, ICloneable<ChainingE
 
     return true;
   }
+
+  protected ChainingExpression(Protector protector, ChainingExpression original) : base(protector, original) {
+    Operands = original.Operands.ConvertAll(o => o.WithProtections(protector));
+    Operators = original.Operators; //IPMTODO: is it safe tp shallow-copy `Operators` here?
+    OperatorLocs = original.OperatorLocs.ConvertAll(ol => protector.Clone(ol));
+    PrefixLimits = original.PrefixLimits.ConvertAll(pl => pl?.WithProtections(protector));
+    E = ComputeDesugaring(Operands, Operators, OperatorLocs, PrefixLimits);
+  }
+  public override ChainingExpression WithProtections(Protector protector) => new(protector, this);
 }

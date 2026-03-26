@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -36,4 +37,6 @@ public class ApplyExpr : Expression, ICloneable<ApplyExpr> {
   public ApplyExpr Clone(Cloner cloner) {
     return new ApplyExpr(cloner, this);
   }
+
+  public override ApplyExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

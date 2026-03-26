@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using DafnyCore.IncrementalCompilation;
 using JetBrains.Annotations;
 
 namespace Microsoft.Dafny;
@@ -38,4 +39,10 @@ public class FieldLocationExpression : SuffixExpr, ICloneable<FieldLocationExpre
   public override IEnumerable<Expression> SubExpressions => ResolvedExpression == null ? PreResolveSubExpressions : [
     ResolvedExpression
   ];
+
+  protected FieldLocationExpression(Protector protector, FieldLocationExpression original) : base(protector, original) {
+    Name = protector.Clone(original.Name);
+    Backtick = original.Backtick; //IPMTODO: clone backtick?
+  }
+  public override FieldLocationExpression WithProtections(Protector protector) => new(protector, this);
 }

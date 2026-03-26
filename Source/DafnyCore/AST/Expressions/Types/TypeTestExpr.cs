@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Diagnostics.Contracts;
 
 namespace Microsoft.Dafny;
@@ -17,4 +18,7 @@ public class TypeTestExpr : TypeUnaryExpr, ICloneable<TypeTestExpr> {
   public TypeTestExpr Clone(Cloner cloner) {
     return new TypeTestExpr(cloner, this);
   }
+
+  protected TypeTestExpr(Protector protector, TypeTestExpr original) : base(protector, original) { }
+  public override TypeTestExpr WithProtections(Protector protector) => new(protector, this);
 }

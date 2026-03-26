@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -23,7 +24,7 @@ namespace DafnyCore.IncrementalCompilation {
       ToProtectAssertionCore(e.WrappedWith(ProtectorFunctions.NewProtect));
     private static AssertStmt ToProtectAssertionCore(ApplySuffix e) => new(SourceOrigin.NoToken, e, null, null); // maybe add label?
 
-    public static UnreachableException NewCannotAppearBeforeResolution<T>(this T o) where T : notnull => new($"{o} (of type `{typeof(T).Name}`) can't appear before resolution"); // IPMTODO: rename after you remove the old protection
+    public static UnreachableException CannotAppearBeforeResolution<T>(this T o) where T : notnull => new($"{o} (of type `{typeof(T).Name}`) can't appear before resolution"); // IPMTODO: rename after you remove the old protection
     public static Specification<Expression> WithProtections(this Specification<Expression> spec, Protector protector) =>
       new(spec.Expressions?.ConvertAll(e => e.WithProtections(protector)), protector.Clone(spec.Attributes));
     public static Specification<FrameExpression> WithProtections(this Specification<FrameExpression> spec, Protector protector) =>
@@ -44,5 +45,20 @@ namespace DafnyCore.IncrementalCompilation {
       }
     }
     public static IEnumerable<Statement> WithProtections(this IEnumerable<Statement> ss, Protector protector) => ss.SelectMany(s => s.WithProtectionsAsSeparateStatements(protector));
+
+    public static StmtExpr WithPrependedAssertions(this Expression e, AssertStmt first, params AssertStmt[] secondUntilLast) => e.WithPrependedAssertions([first, ..secondUntilLast]);
+    // enumerable must have at least one element
+    public static StmtExpr WithPrependedAssertions(this Expression e, IEnumerable<AssertStmt> ss) {
+      Contract.Requires(ss.Any());
+      return ss.Reverse().AggregateAs(e, (prev, s) => new StmtExpr(prev.Origin, s, prev));
+    }
+    // Weaker version of `WithPrependedAssertions` that doesn't guarantee that the result is a `StmtExpr`, but can accept being passed no elements
+    public static Expression WithPrependedAssertionsIfAny(this Expression e, params AssertStmt[] ss) => e.WithPrependedAssertionsIfAny(ss as IEnumerable<AssertStmt>);
+    // Weaker version of `WithPrependedAssertions` that doesn't guarantee that the result is a `StmtExpr`, but can accept an empty enumerable
+    public static Expression WithPrependedAssertionsIfAny(this Expression e, IEnumerable<AssertStmt> ss) {
+      Contract.Ensures(!ss.Any() || Contract.Result<Expression>() is StmtExpr);
+      return ss.Reverse().Aggregate(e, (prev, s) => new StmtExpr(prev.Origin, s, prev));
+    }
+
   }
 }

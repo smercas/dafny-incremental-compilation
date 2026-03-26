@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -56,4 +57,13 @@ public class SeqSelectExpr : Expression, ICloneable<SeqSelectExpr> {
   public SeqSelectExpr Clone(Cloner cloner) {
     return new SeqSelectExpr(cloner, this);
   }
+
+  protected SeqSelectExpr(Protector protector, SeqSelectExpr original) : base(protector, original) {
+    SelectOne = original.SelectOne;
+    Seq = original.Seq.WithProtections(protector);
+    E0 = original.E0?.WithProtections(protector);
+    E1 = original.E1?.WithProtections(protector);
+    CloseParen = original.CloseParen;
+  }
+  public override SeqSelectExpr WithProtections(Protector protector) => new(protector, this);
 }

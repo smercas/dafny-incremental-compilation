@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -27,4 +28,9 @@ public class MultiSetFormingExpr : Expression, ICloneable<MultiSetFormingExpr> {
   public MultiSetFormingExpr Clone(Cloner cloner) {
     return new MultiSetFormingExpr(cloner, this);
   }
+
+  protected MultiSetFormingExpr(Protector protector, MultiSetFormingExpr original) : base(protector, original) {
+    E = original.E.WithProtections(protector);
+  }
+  public override MultiSetFormingExpr WithProtections(Protector protector) => new(protector, this);
 }

@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Diagnostics.Contracts;
 
 namespace Microsoft.Dafny;
@@ -23,4 +24,9 @@ public class FreshExpr : UnaryOpExpr, ICloneable<FreshExpr> {
   }
 
   public new FreshExpr Clone(Cloner cloner) { return new FreshExpr(cloner, this); }
+
+  protected FreshExpr(Protector protector, FreshExpr original) : base(protector, original) {
+    At = original.At;
+  }
+  public override FreshExpr WithProtections(Protector protector) => new(protector, this);
 }

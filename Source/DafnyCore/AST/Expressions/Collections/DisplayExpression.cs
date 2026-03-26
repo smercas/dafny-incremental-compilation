@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -18,4 +19,9 @@ public abstract class DisplayExpression : Expression {
   }
 
   public override IEnumerable<Expression> SubExpressions => Elements;
+
+  protected DisplayExpression(Protector protector, DisplayExpression original) : base(protector, original) {
+    Elements = original.Elements.ConvertAll(e => e.WithProtections(protector));
+  }
+  public abstract override DisplayExpression WithProtections(Protector protector);
 }

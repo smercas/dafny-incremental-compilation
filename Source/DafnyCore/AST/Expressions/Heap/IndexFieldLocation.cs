@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using DafnyCore.IncrementalCompilation;
+using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
@@ -37,4 +38,6 @@ public class IndexFieldLocation : Expression, ICloneable<IndexFieldLocation> {
 
   // objectCopy is not part of it because it's only used for resolution
   public override IEnumerable<Expression> SubExpressions => Indices;
+
+  public override IndexFieldLocation WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

@@ -1,3 +1,5 @@
+using DafnyCore.IncrementalCompilation;
+using Microsoft.Boogie;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -58,6 +60,11 @@ public class IdentifierExpr : Expression, IHasReferences, ICloneable<IdentifierE
   }
 
   public override IEnumerable<INode> Children { get; } = Enumerable.Empty<Node>();
+
+  protected IdentifierExpr(Protector protector, IdentifierExpr original) : base(protector, original) {
+    Name = original.Name;
+  }
+  public override IdentifierExpr WithProtections(Protector protector) => new(protector, this);
 }
 
 /// <summary>
@@ -75,4 +82,7 @@ public class ImplicitIdentifierExpr : IdentifierExpr {
     : base(origin, v) { }
 
   public override bool IsImplicit => true;
+
+  protected ImplicitIdentifierExpr(Protector protector, ImplicitIdentifierExpr original) : base(protector, original) { }
+  public override ImplicitIdentifierExpr WithProtections(Protector protector) => new(protector, this);
 }

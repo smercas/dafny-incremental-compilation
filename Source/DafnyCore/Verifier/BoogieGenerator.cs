@@ -25,6 +25,7 @@ using Microsoft.Dafny.Triggers;
 using Serilog.Events;
 using PODesc = Microsoft.Dafny.ProofObligationDescription;
 using static Microsoft.Dafny.GenericErrors;
+using DafnyCore.IncrementalCompilation;
 
 namespace Microsoft.Dafny {
 
@@ -4320,6 +4321,8 @@ namespace Microsoft.Dafny {
         Expr = expr;
         Type = type;  // resolve immediately
       }
+
+      public override BoogieWrapper WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
     }
 
     internal class BoogieFunctionCall : Expression {
@@ -4349,6 +4352,8 @@ namespace Microsoft.Dafny {
           }
         }
       }
+
+      public override BoogieFunctionCall WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
     }
 
     internal class SubstLetExpr : LetExpr {
@@ -4364,6 +4369,7 @@ namespace Microsoft.Dafny {
         this.typeMap = typeMap;
         this.Constraint_Bounds = constraintBounds;
       }
+      public override SubstLetExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
     }
 
     internal class FuelSettingPair {

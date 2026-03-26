@@ -40,5 +40,6 @@ public class BlockStmt : BlockLikeStmt, ICloneable<BlockStmt> {
   }
 
   public override BlockStmt WithProtections(Protector protector) => WithProtections(protector, null!);
+  // the `additional` statements are added as-is, without any protections. if you want them to be protected, pass them protected
   public BlockStmt WithProtections(Protector protector, IEnumerable<Statement> additional) => new(protector, this, additional);
 }

@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -106,4 +107,11 @@ public class NestedMatchExpr : Expression, ICloneable<NestedMatchExpr>, ICanForm
       }
     });
   }
+
+  protected NestedMatchExpr(Protector protector, NestedMatchExpr original) : base(protector, original) {
+    Source = original.Source.WithProtections(protector);
+    Cases = original.Cases.ConvertAll(c => c.WithProtections(protector));
+    UsesOptionalBraces = original.UsesOptionalBraces;
+  }
+  public override NestedMatchExpr WithProtections(Protector protector) => new(protector, this);
 }

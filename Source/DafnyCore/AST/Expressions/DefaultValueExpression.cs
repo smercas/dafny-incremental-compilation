@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
@@ -94,6 +95,8 @@ public abstract class DefaultValueExpression : ConcreteSyntaxExpression {
       return base.Substitute(expr);
     }
   }
+
+  public override DefaultValueExpression WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }
 
 public class DefaultValueExpressionType : DefaultValueExpression, ICloneable<DefaultValueExpressionType> {
@@ -116,6 +119,8 @@ public class DefaultValueExpressionType : DefaultValueExpression, ICloneable<Def
   protected override Dictionary<TypeParameter, Type> GetTypeMap() {
     return typeMap;
   }
+
+  public override DefaultValueExpressionType WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }
 
 public class DefaultValueExpressionPreType : DefaultValueExpression, ICloneable<DefaultValueExpressionPreType> {
@@ -140,4 +145,6 @@ public class DefaultValueExpressionPreType : DefaultValueExpression, ICloneable<
       x => x.Key,
       x => PreType2TypeUtil.PreType2FixedType(x.Value));
   }
+
+  public override DefaultValueExpressionPreType WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

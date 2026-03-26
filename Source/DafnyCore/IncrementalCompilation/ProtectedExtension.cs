@@ -48,7 +48,7 @@ namespace DafnyCore.IncrementalCompilation {
     // if `Last` isn't called with something in both stacks, geniunely what're we doing?
     public static (Lazy<MemberDecl>, Stack<Lazy<IAttributeBearingDeclaration>>) MostRecentContext => Context.Peek();
     #endregion
-    private static UnreachableException CannotAppearBeforeResolution<T>(this T o) where T : notnull => new($"{o} (of type `{typeof(T).Name}`) can't appear before resolution");
+    private static UnreachableException OldCannotAppearBeforeResolution<T>(this T o) where T : notnull => new($"{o} (of type `{typeof(T).Name}`) can't appear before resolution");
     private static Cloner cloner { get; } = new();
     private static IOrigin Clone(this IOrigin o) => cloner.Origin(o);
     [return: NotNullIfNotNull(nameof(a))] private static Attributes? Clone(this Attributes? a) => cloner.CloneAttributes(a);
@@ -76,7 +76,7 @@ namespace DafnyCore.IncrementalCompilation {
           _ => bv.AsProtected(),
         },
         Formal f => f switch {
-          ImplicitFormal i => throw i.CannotAppearBeforeResolution(),
+          ImplicitFormal i => throw i.OldCannotAppearBeforeResolution(),
           _ => f.AsProtected(),
         },
         _ => throw new UnreachableException(),
@@ -186,7 +186,7 @@ namespace DafnyCore.IncrementalCompilation {
       VarDeclStmt p => p.AsProtected(),
       BreakOrContinueStmt p => p.AsProtected(),
       ForallStmt p => p.AsProtected(),
-      CallStmt p => throw p.CannotAppearBeforeResolution(),
+      CallStmt p => throw p.OldCannotAppearBeforeResolution(),
       PrintStmt p => p.AsProtected(),
       ProduceStmt p => p switch {
         ReturnStmt pp => pp.AsProtected(),
@@ -204,7 +204,7 @@ namespace DafnyCore.IncrementalCompilation {
       },
       BlockByProofStmt p => p.AsProtected(),
       CalcStmt p => p.AsProtected(),
-      MatchStmt p => throw p.CannotAppearBeforeResolution(),
+      MatchStmt p => throw p.OldCannotAppearBeforeResolution(),
       SkeletonStatement p => p.AsProtected(),
       LabeledStatement p => p switch {
         AlternativeStmt pp => pp.AsProtected(),
@@ -213,7 +213,7 @@ namespace DafnyCore.IncrementalCompilation {
           OneBodyLoopStmt ppp => ppp switch {
             ForLoopStmt pppp => pppp.AsProtected(),
             WhileStmt pppp => pppp switch {
-              RefinedWhileStmt ppppp => throw ppppp.CannotAppearBeforeResolution(),
+              RefinedWhileStmt ppppp => throw ppppp.OldCannotAppearBeforeResolution(),
               _ when pppp.IsExactly() => pppp.AsProtected(),
               _ => throw new UnreachableException(),
             },
@@ -330,14 +330,14 @@ namespace DafnyCore.IncrementalCompilation {
 
     #region Expression
     public static Expression AsProtected(this Expression e) => e switch {
-      ApplyExpr p => throw p.CannotAppearBeforeResolution(),
-      FunctionCallExpr p => throw p.CannotAppearBeforeResolution(),
-      MemberSelectExpr p => throw p.CannotAppearBeforeResolution(),
+      ApplyExpr p => throw p.OldCannotAppearBeforeResolution(),
+      FunctionCallExpr p => throw p.OldCannotAppearBeforeResolution(),
+      MemberSelectExpr p => throw p.OldCannotAppearBeforeResolution(),
       MultiSelectExpr p => p.AsProtected(),
       SeqSelectExpr p => p.AsProtected(),
       ThisExpr p => p switch {
         ImplicitThisExpr pp => pp switch {
-          ImplicitThisExprConstructorCall ppp => throw ppp.CannotAppearBeforeResolution(),
+          ImplicitThisExprConstructorCall ppp => throw ppp.OldCannotAppearBeforeResolution(),
           _ when pp.IsExactly() => pp.AsProtected(),
           _ => throw new UnreachableException(),
         },
@@ -369,8 +369,8 @@ namespace DafnyCore.IncrementalCompilation {
       NestedMatchExpr p => p.AsProtected(),
       TernaryExpr p => p.AsProtected(),
       DatatypeValue p => p.AsProtected(),
-      FieldLocation p => throw p.CannotAppearBeforeResolution(),
-      IndexFieldLocation p => throw p.CannotAppearBeforeResolution(),
+      FieldLocation p => throw p.OldCannotAppearBeforeResolution(),
+      IndexFieldLocation p => throw p.OldCannotAppearBeforeResolution(),
       LocalsObjectExpression p => p.AsProtected(),
       OldExpr p => p.AsProtected(),
       UnchangedExpr p => p.AsProtected(),
@@ -390,8 +390,8 @@ namespace DafnyCore.IncrementalCompilation {
         },
         _ => throw new UnreachableException(),
       },
-      BoxingCastExpr p => throw p.CannotAppearBeforeResolution(),
-      UnboxingCastExpr p => throw p.CannotAppearBeforeResolution(),
+      BoxingCastExpr p => throw p.OldCannotAppearBeforeResolution(),
+      UnboxingCastExpr p => throw p.OldCannotAppearBeforeResolution(),
       IdentifierExpr p => p switch {
         AutoGhostIdentifierExpr pp => pp.AsProtected(),
         ImplicitIdentifierExpr pp => pp.AsProtected(),
@@ -399,16 +399,16 @@ namespace DafnyCore.IncrementalCompilation {
         _ => throw new UnreachableException(),
       },
       LetExpr p => p switch {
-        BoogieGenerator.SubstLetExpr pp => throw pp.CannotAppearBeforeResolution(),
+        BoogieGenerator.SubstLetExpr pp => throw pp.OldCannotAppearBeforeResolution(),
         _ when p.IsExactly() => p.AsProtected(),
         _ => throw new UnreachableException(),
       },
-      ResolverIdentifierExpr p => throw p.CannotAppearBeforeResolution(),
+      ResolverIdentifierExpr p => throw p.OldCannotAppearBeforeResolution(),
       ConcreteSyntaxExpression p => p switch {
         NameSegment pp => pp.AsProtected(),
         SuffixExpr pp => pp switch {
           ApplySuffix ppp => ppp switch {
-            ProtectToProveApplySuffix pppp => throw new UnreachableException($"Due to the nature of the protection applied over the AST, no part of the AST should be processed more than once; this expression signals that a part of the AST {pppp} is to be processed at least twice"),
+            ProtectToProveApplySuffix pppp => throw new UnreachableException($"Due to the nature of the protection applied over the AST, no part of the AST should be processed more than once; this expression signals that a part of the AST ({pppp}) is to be processed at least twice"),
             _ when ppp.IsExactly() => ppp.AsProtected(),
             _ => throw new UnreachableException(),
           },
@@ -420,21 +420,22 @@ namespace DafnyCore.IncrementalCompilation {
         DatatypeUpdateExpr pp => pp.AsProtected(),
         ChainingExpression pp => pp.AsProtected(),
         ParensExpression pp => pp switch {
-          AutoGeneratedExpression ppp => throw ppp.CannotAppearBeforeResolution(),
+          AutoGeneratedExpression ppp => throw ppp.OldCannotAppearBeforeResolution(),
           _ when pp.IsExactly() => pp.AsProtected(),
           _ => throw new UnreachableException(),
         },
         LetOrFailExpr pp => pp.AsProtected(),
         DefaultValueExpression pp => pp switch {
-          DefaultValueExpressionType ppp => throw ppp.CannotAppearBeforeResolution(),
-          DefaultValueExpressionPreType ppp => throw ppp.CannotAppearBeforeResolution(),
+          DefaultValueExpressionType ppp => throw ppp.OldCannotAppearBeforeResolution(),
+          DefaultValueExpressionPreType ppp => throw ppp.OldCannotAppearBeforeResolution(),
           _ => throw new UnreachableException(),
         },
         NegationExpression pp => pp.AsProtected(),
+        ApproximateExpr pp => pp.AsProtected(),
         _ => throw new UnreachableException(),
       },
       LiteralExpr p => p switch {
-        StaticReceiverExpr pp => throw pp.CannotAppearBeforeResolution(),
+        StaticReceiverExpr pp => throw pp.OldCannotAppearBeforeResolution(),
         CharLiteralExpr pp => pp.AsProtected(),
         StringLiteralExpr pp => pp.AsProtected(),
         DecimalLiteralExpr pp => pp.AsProtected(),
@@ -442,9 +443,9 @@ namespace DafnyCore.IncrementalCompilation {
         _ => throw new UnreachableException(),
       },
       StmtExpr p => p.AsProtected(),
-      MatchExpr p => throw p.CannotAppearBeforeResolution(),
-      BoogieGenerator.BoogieWrapper p => throw p.CannotAppearBeforeResolution(),
-      BoogieGenerator.BoogieFunctionCall p => throw p.CannotAppearBeforeResolution(),
+      MatchExpr p => throw p.OldCannotAppearBeforeResolution(),
+      BoogieGenerator.BoogieWrapper p => throw p.OldCannotAppearBeforeResolution(),
+      BoogieGenerator.BoogieFunctionCall p => throw p.OldCannotAppearBeforeResolution(),
       _ => throw new UnreachableException(),
     };
     public static MultiSelectExpr AsProtected(this MultiSelectExpr e) => new(e.Origin.Clone(), e.Array.AsProtected(), e.Indices.ConvertAll(AsProtected));
@@ -509,6 +510,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static NegationExpression AsProtected(this NegationExpression e) => new(e.Origin.Clone(), e.E.AsProtected());
     public static LiteralExpr AsProtected(this LiteralExpr e) => e.Clone();
     public static StmtExpr AsProtected(this StmtExpr e) => new(e.Origin.Clone(), e.S.AsProtected(), e.E.AsProtected());
+    public static ApproximateExpr AsProtected(this ApproximateExpr e) => new(e.Origin.Clone(), e.Expr.AsProtected());
     #endregion
 
     #region Method, Constructor and Function
@@ -538,7 +540,7 @@ namespace DafnyCore.IncrementalCompilation {
     public static Method AsProtected(this Method m) => m switch {
       Lemma l => l.AsProtected(),
       TwoStateLemma l => l.AsProtected(),
-      PrefixLemma l => throw CannotAppearBeforeResolution(l),
+      PrefixLemma l => throw OldCannotAppearBeforeResolution(l),
       ExtremeLemma l => l.AsProtected(),
       _ when m.IsExactly() => WithMemberAdditionalContext(() => new Method(
         m.Origin.Clone(),
@@ -600,8 +602,8 @@ namespace DafnyCore.IncrementalCompilation {
     public static Function AsProtected(this Function f) => f switch {
       Predicate p => p.AsProtected(),
       TwoStateFunction tsf => tsf.AsProtected(),
-      PrefixPredicate pp => throw pp.CannotAppearBeforeResolution(),
-      SpecialFunction sf => throw sf.CannotAppearBeforeResolution(), // during default module resolution, still after the point where this would happen
+      PrefixPredicate pp => throw pp.OldCannotAppearBeforeResolution(),
+      SpecialFunction sf => throw sf.OldCannotAppearBeforeResolution(), // during default module resolution, still after the point where this would happen
       ExtremePredicate ep => ep.AsProtected(),
       _ when f.IsExactly() => WithMemberAdditionalContext(() => new Function(
         f.Origin.Clone(),

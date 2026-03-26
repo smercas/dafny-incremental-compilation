@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using DafnyCore.IncrementalCompilation;
+using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
@@ -46,4 +47,10 @@ public class IndexFieldLocationExpression : SuffixExpr, ICloneable<IndexFieldLoc
   public override IEnumerable<Expression> SubExpressions => ResolvedExpression == null ? PreResolveSubExpressions : [
     ResolvedExpression
   ];
+  protected IndexFieldLocationExpression(Protector protector, IndexFieldLocationExpression original) : base(protector, original) {
+    Indices = original.Indices.ConvertAll(i => i.WithProtections(protector));
+    OpenParen = original.OpenParen;
+    CloseParen = original.CloseParen;
+  }
+  public override IndexFieldLocationExpression WithProtections(Protector protector) => new(protector, this);
 }

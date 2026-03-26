@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -42,4 +43,11 @@ public class SeqConstructionExpr : Expression, ICloneable<SeqConstructionExpr> {
   public SeqConstructionExpr Clone(Cloner cloner) {
     return new SeqConstructionExpr(cloner, this);
   }
+
+  protected SeqConstructionExpr(Protector protector, SeqConstructionExpr original) : base(protector, original) {
+    ExplicitElementType = original.ExplicitElementType.ApplyIfNotNull(protector.Clone);
+    N = original.N.WithProtections(protector);
+    Initializer = original.Initializer.WithProtections(protector);
+  }
+  public override SeqConstructionExpr WithProtections(Protector protector) => new(protector, this);
 }

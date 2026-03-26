@@ -158,11 +158,16 @@ namespace Microsoft.Dafny {
         }
       }
     }
-    public static IList<T> ModifyAllInPlace<T>(this IList<T> l, Func<T, T> transformer) {
-      for (int i = 0; i < l.Count; i += 1) {
-        l[i] = transformer(l[i]);
-      }
-      return l;
+    public static TTail AggregateAs<TSource, THead, TTail>(this IEnumerable<TSource> es, THead start, Func<THead, TSource, TTail> func) where TTail : THead {
+      using var it = es.GetEnumerator();
+      if (!it.MoveNext()) { throw new InvalidOperationException("Sequence contains no elements"); }
+      var prev = start;
+      TTail curr;
+      do {
+        curr = func(prev, it.Current);
+        prev = curr;
+      } while (it.MoveNext());
+      return curr;
     }
     public static IEnumerable<T> ExtendWith<T>(this IEnumerable<T> es, Func<T> extensionProducer) => es.ExtendWithBase(i => extensionProducer(), null);
     public static IEnumerable<T> ExtendWith<T>(this IEnumerable<T> es, Func<int, T> extensionProducer) => es.ExtendWithBase(extensionProducer, null);

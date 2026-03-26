@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 
 namespace Microsoft.Dafny;
@@ -38,4 +39,9 @@ public class ParensExpression : ConcreteSyntaxExpression, ICanFormat, ICloneable
   public ParensExpression Clone(Cloner cloner) {
     return new ParensExpression(cloner, this);
   }
+
+  protected ParensExpression(Protector protector, ParensExpression original) : base(protector, original) {
+    E = original.E.WithProtections(protector);
+  }
+  public override ParensExpression WithProtections(Protector protector) => new(protector, this);
 }

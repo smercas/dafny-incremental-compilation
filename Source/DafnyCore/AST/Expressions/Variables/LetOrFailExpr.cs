@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -41,4 +42,15 @@ public class LetOrFailExpr : ConcreteSyntaxExpression, ICloneable<LetOrFailExpr>
   public bool SetIndent(int indentBefore, TokenNewIndentCollector formatter) {
     return formatter.SetIndentVarDeclStmt(indentBefore, OwnedTokens, Lhs == null, true);
   }
+
+  protected LetOrFailExpr(Protector protector, LetOrFailExpr original) : base(protector, original) {
+    Lhs = original.Lhs;
+    Rhs = original.Rhs.WithProtections(protector);
+    Body = original.Body.WithProtections(protector);
+    if (original.Lhs is not null) {
+      Lhs = Lhs!.WithProtections(protector);
+      Body = Body.WithPrependedAssertions(original.Lhs.Var.ToProtectAssertion());
+    }
+  }
+  public override LetOrFailExpr WithProtections(Protector protector) => new(protector, this);
 }

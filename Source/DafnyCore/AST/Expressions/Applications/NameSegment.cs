@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -35,4 +36,10 @@ public class NameSegment : ConcreteSyntaxExpression, ICloneable<NameSegment>, IC
     }
     return false;
   }
+
+  protected NameSegment(Protector protector, NameSegment original) : base(protector, original) {
+    Name = original.Name;
+    OptTypeArguments = original.OptTypeArguments?.ConvertAll<Type>(protector.Clone);
+  }
+  public override NameSegment WithProtections(Protector protector) => new(protector, this);
 }

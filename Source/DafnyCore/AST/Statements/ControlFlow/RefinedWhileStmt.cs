@@ -16,5 +16,5 @@ public class RefinedWhileStmt : WhileStmt {
     Contract.Requires(body != null);
   }
 
-  public override RefinedWhileStmt WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
+  public override RefinedWhileStmt WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

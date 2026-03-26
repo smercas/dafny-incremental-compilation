@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -28,4 +29,6 @@ public class BoxingCastExpr : Expression {  // a BoxingCastExpr is used only as 
   public override IEnumerable<Expression> SubExpressions {
     get { yield return E; }
   }
+
+  public override BoxingCastExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

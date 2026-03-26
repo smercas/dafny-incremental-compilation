@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -44,4 +45,10 @@ public class UnchangedExpr : Expression, ICloneable<UnchangedExpr>, ICanFormat {
   public bool SetIndent(int indentBefore, TokenNewIndentCollector formatter) {
     return formatter.SetIndentParensExpression(indentBefore, OwnedTokens);
   }
+
+  protected UnchangedExpr(Protector protector, UnchangedExpr original) : base(protector, original) {
+    Frame = original.Frame.ConvertAll(f => f.WithProtections(protector));
+    At = original.At;
+  }
+  public override UnchangedExpr WithProtections(Protector protector) => new(protector, this);
 }

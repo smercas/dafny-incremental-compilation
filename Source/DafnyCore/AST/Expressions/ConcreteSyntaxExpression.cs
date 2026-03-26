@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -49,4 +50,7 @@ public abstract class ConcreteSyntaxExpression : Expression {
   public override IEnumerable<INode> PreResolveChildren => PreResolveSubExpressions;
 
   public override IEnumerable<Type> ComponentTypes => ResolvedExpression.ComponentTypes;
+
+  protected ConcreteSyntaxExpression(Protector protector, ConcreteSyntaxExpression original) : base(protector, original) { }
+  public abstract override ConcreteSyntaxExpression WithProtections(Protector protector);
 }

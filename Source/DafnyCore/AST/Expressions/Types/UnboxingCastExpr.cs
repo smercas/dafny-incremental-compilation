@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -28,4 +29,6 @@ public class UnboxingCastExpr : Expression {  // an UnboxingCastExpr is used onl
   public override IEnumerable<Expression> SubExpressions {
     get { yield return E; }
   }
+
+  public override UnboxingCastExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

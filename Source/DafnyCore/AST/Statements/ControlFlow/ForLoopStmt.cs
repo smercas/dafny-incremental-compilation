@@ -117,7 +117,7 @@ public class ForLoopStmt : OneBodyLoopStmt, ICloneable<ForLoopStmt>, ICanFormat 
     }
   }
 
-  protected ForLoopStmt(Protector protector, ForLoopStmt original) : base(protector, original, [original.LoopIndex.ToProtectAssertion()]) {
+  protected ForLoopStmt(Protector protector, ForLoopStmt original) : base(protector, original, original.LoopIndex.Name.isWildcardName() ? null : [original.LoopIndex.ToProtectAssertion()]) { // geniunely don't know what to do here to pass the default value besides maybe having a custom default value
     LoopIndex = original.LoopIndex.WithProtections(protector);
     Start = original.Start.WithProtections(protector);
     End = original.End?.WithProtections(protector);

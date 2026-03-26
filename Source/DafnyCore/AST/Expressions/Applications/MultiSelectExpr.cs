@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -41,4 +42,10 @@ public class MultiSelectExpr : Expression, ICloneable<MultiSelectExpr> {
   public MultiSelectExpr Clone(Cloner cloner) {
     return new MultiSelectExpr(cloner, this);
   }
+
+  protected MultiSelectExpr(Protector protector, MultiSelectExpr original) : base(protector, original) {
+    Indices = original.Indices.ConvertAll(i => i.WithProtections(protector));
+    Array = original.Array.WithProtections(protector);
+  }
+  public override MultiSelectExpr WithProtections(Protector protector) => new(protector, this);
 }

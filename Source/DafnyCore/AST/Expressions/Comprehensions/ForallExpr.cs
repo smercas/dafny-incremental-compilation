@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -30,4 +31,7 @@ public class ForallExpr : QuantifierExpr, ICloneable<ForallExpr> {
     body.Type = Term.Type;
     return body;
   }
+
+  protected ForallExpr(Protector protector, ForallExpr original) : base(protector, original) { }
+  public override ForallExpr WithProtections(Protector protector) => new(protector, this);
 }

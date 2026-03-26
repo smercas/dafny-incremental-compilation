@@ -139,5 +139,5 @@ public class CallStmt : Statement, ICloneable<CallStmt> {
     }
   }
 
-  public override CallStmt WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
+  public override CallStmt WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

@@ -978,5 +978,7 @@ public abstract class Expression : NodeWithOrigin, IProtectable<Expression> {
       Type = Type.Bool
     };
   }
-  public virtual Expression WithProtections(Protector protector) => new Cloner().CloneExpr(this); //IPMTODO: make abstract when all are implemented
+
+  protected Expression(Protector protector, Expression original) : base(protector, original) { }
+  public abstract Expression WithProtections(Protector protector);
 }

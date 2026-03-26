@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -534,4 +535,11 @@ public class BinaryExpr : Expression, ICloneable<BinaryExpr>, ICanFormat {
       return false;
     }
   }
+
+  protected BinaryExpr(Protector protector, BinaryExpr original) : base(protector, original) {
+    Op = original.Op;
+    E0 = original.E0.WithProtections(protector);
+    E1 = original.E1.WithProtections(protector);
+  }
+  public override BinaryExpr WithProtections(Protector protector) => new(protector, this);
 }

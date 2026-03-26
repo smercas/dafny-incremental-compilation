@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -41,4 +42,10 @@ public class ExprDotName : SuffixExpr, ICloneable<ExprDotName> {
     SuffixNameNode = suffixNameNode;
     OptTypeArguments = optTypeArguments;
   }
+
+  protected ExprDotName(Protector protector, ExprDotName original) : base(protector, original) {
+    SuffixNameNode = protector.Clone(original.SuffixNameNode);
+    OptTypeArguments = original.OptTypeArguments?.ConvertAll<Type>(protector.Clone);
+  }
+  public override ExprDotName WithProtections(Protector protector) => new(protector, this);
 }

@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -36,9 +37,15 @@ public class MapDisplayExpr : Expression, ICanFormat, ICloneable<MapDisplayExpr>
   public MapDisplayExpr Clone(Cloner cloner) {
     return new MapDisplayExpr(cloner, this);
   }
+
+  protected MapDisplayExpr(Protector protector, MapDisplayExpr original) : base(protector, original) {
+    Finite = original.Finite;
+    Elements = original.Elements.ConvertAll(e => e.WithProtections(protector));
+  }
+  public override MapDisplayExpr WithProtections(Protector protector) => new(protector, this);
 }
 
-public class MapDisplayEntry {
+public class MapDisplayEntry : IProtectable<MapDisplayEntry> {
   public Expression A, B;
 
   [SyntaxConstructor]
@@ -46,4 +53,10 @@ public class MapDisplayEntry {
     A = a;
     B = b;
   }
+
+  protected MapDisplayEntry(Protector protector, MapDisplayEntry original) {
+    A = original.A.WithProtections(protector);
+    B = original.B.WithProtections(protector);
+  }
+  public MapDisplayEntry WithProtections(Protector protector) => new(protector, this);
 }

@@ -2,6 +2,7 @@
 using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using System.Linq;
 
 namespace Microsoft.Dafny;
 
@@ -145,7 +146,10 @@ public class IfStmt : LabeledStatement, ICloneable<IfStmt>, ICanFormat {
   protected IfStmt(Protector protector, IfStmt original) : base(protector, original) {
     IsBindingGuard = original.IsBindingGuard;
     Guard = original.Guard?.WithProtections(protector);
-    Thn = original.Thn.WithProtections(protector);
+    Thn = IsBindingGuard switch {
+      true => original.Thn.WithProtections(protector, (Guard as ComprehensionExpr)!.BoundVars.Select(bv => bv.ToProtectAssertion())), // determined from parser that `Guard` is an `ExistsExpr`, hope this doesn't change
+      false => original.Thn.WithProtections(protector),
+    };
     Els = original.Els?.WithProtections(protector);
   }
   public override IfStmt WithProtections(Protector protector) => new(protector, this);

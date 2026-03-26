@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -38,4 +39,10 @@ public class SetComprehension : ComprehensionExpr, ICloneable<SetComprehension> 
     TermIsImplicit = term == null;
     Finite = finite;
   }
+
+  protected SetComprehension(Protector protector, SetComprehension original) : base(protector, original) {
+    TermIsImplicit |= original.TermIsImplicit;
+    Finite = original.Finite;
+  }
+  public override SetComprehension WithProtections(Protector protector) => new(protector, this);
 }

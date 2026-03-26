@@ -1,5 +1,7 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
+
 namespace Microsoft.Dafny;
 
 public class ConversionExpr : TypeUnaryExpr, ICloneable<ConversionExpr> {
@@ -18,4 +20,9 @@ public class ConversionExpr : TypeUnaryExpr, ICloneable<ConversionExpr> {
   public ConversionExpr Clone(Cloner cloner) {
     return new ConversionExpr(cloner, this);
   }
+
+  protected ConversionExpr(Protector protector, ConversionExpr original) : base(protector, original) {
+    messagePrefix = original.messagePrefix;
+  }
+  public override ConversionExpr WithProtections(Protector protector) => new(protector, this);
 }

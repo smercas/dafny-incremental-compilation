@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -25,4 +26,9 @@ public class SetDisplayExpr : DisplayExpression, ICanFormat, ICloneable<SetDispl
   public SetDisplayExpr Clone(Cloner cloner) {
     return new SetDisplayExpr(cloner, this);
   }
+
+  protected SetDisplayExpr(Protector protector, SetDisplayExpr original) : base(protector, original) {
+    Finite = original.Finite;
+  }
+  public override SetDisplayExpr WithProtections(Protector protector) => new(protector, this);
 }

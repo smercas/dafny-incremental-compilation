@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -103,4 +104,6 @@ public class StaticReceiverExpr : LiteralExpr, ICloneable<StaticReceiverExpr> {
   public new StaticReceiverExpr Clone(Cloner cloner) {
     return new StaticReceiverExpr(cloner, this);
   }
+
+  public override StaticReceiverExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

@@ -80,6 +80,8 @@ public class MatchExpr : Expression, IMatch, ICloneable<MatchExpr> {  // a Match
       }
     }
   }
+
+  public override MatchExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }
 
 public abstract class MatchCase : NodeWithOrigin, IHasReferences {
@@ -219,7 +221,7 @@ public class MatchStmt : Statement, IMatch, ICloneable<MatchStmt> {
     }
   }
 
-  public override MatchStmt WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
+  public override MatchStmt WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }
 
 public class MatchCaseStmt : MatchCase {

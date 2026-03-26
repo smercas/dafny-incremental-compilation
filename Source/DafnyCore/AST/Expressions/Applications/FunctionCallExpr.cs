@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -153,4 +154,6 @@ public class FunctionCallExpr : Expression, IHasReferences, ICloneable<FunctionC
   public IEnumerable<Reference> GetReferences() {
     return Enumerable.Repeat(new Reference(NameNode.ReportingRange, Function), 1);
   }
+
+  public override FunctionCallExpr WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

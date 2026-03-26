@@ -1,5 +1,6 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -117,4 +118,12 @@ public abstract partial class ComprehensionExpr : Expression, IAttributeBearingD
 
     return true;
   }
+
+  protected ComprehensionExpr(Protector protector, ComprehensionExpr original) : base(protector, original) {
+    BoundVars = original.BoundVars.ConvertAll(bv => bv.WithProtections(protector));
+    Range = original.Range?.WithProtections(protector);
+    Attributes = protector.Clone(original.Attributes);
+    Term = original.Term.WithProtections(protector).WithPrependedAssertionsIfAny(original.BoundVars.Select(bv => bv.ToProtectAssertion()));
+  }
+  public abstract override ComprehensionExpr WithProtections(Protector protector);
 }

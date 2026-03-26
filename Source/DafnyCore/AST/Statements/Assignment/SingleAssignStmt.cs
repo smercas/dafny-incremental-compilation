@@ -223,5 +223,5 @@ public class SingleAssignStmt : Statement, ICloneable<SingleAssignStmt> {
     }
   }
 
-  public override SingleAssignStmt WithProtections(Protector protector) => throw this.NewCannotAppearBeforeResolution();
+  public override SingleAssignStmt WithProtections(Protector protector) => throw this.CannotAppearBeforeResolution();
 }

@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 
@@ -39,4 +40,9 @@ public class ApproximateExpr : ConcreteSyntaxExpression, ICloneable<ApproximateE
       yield return Expr;
     }
   }
+
+  protected ApproximateExpr(Protector protector, ApproximateExpr original) : base(protector, original) {
+    Expr = original.Expr.WithProtections(protector);
+  }
+  public override ApproximateExpr WithProtections(Protector protector) => new(protector, this);
 }

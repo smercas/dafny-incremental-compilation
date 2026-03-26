@@ -1,3 +1,4 @@
+using DafnyCore.IncrementalCompilation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,4 +30,11 @@ public class DecreasesToExpr : Expression, ICloneable<DecreasesToExpr> {
   }
 
   public override IEnumerable<Expression> SubExpressions => OldExpressions.Concat(NewExpressions);
+
+  protected DecreasesToExpr(Protector protector, DecreasesToExpr original) : base(protector, original) {
+    OldExpressions = original.OldExpressions.ConvertAll(oe => oe.WithProtections(protector));
+    NewExpressions = original.NewExpressions.ConvertAll(ne => ne.WithProtections(protector));
+    AllowNoChange = original.AllowNoChange;
+  }
+  public override DecreasesToExpr WithProtections(Protector protector) => new(protector, this);
 }

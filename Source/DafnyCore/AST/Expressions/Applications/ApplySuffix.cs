@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -77,4 +78,11 @@ public class ApplySuffix : SuffixExpr, ICloneable<ApplySuffix>, ICanFormat {
       : formatter.GetNewTokenVisualIndent(StartToken, indentBefore);
     return formatter.SetIndentParensExpression(reindent, OwnedTokens);
   }
+
+  protected ApplySuffix(Protector protector, ApplySuffix original) : base(protector, original) {
+    AtTok = original.AtTok.ApplyIfNotNull(protector.Clone);
+    CloseParen = original.CloseParen;
+    Bindings = original.Bindings.WithProtections(protector);
+  }
+  public override ApplySuffix WithProtections(Protector protector) => new(protector, this);
 }

@@ -1,8 +1,10 @@
 #nullable enable
 
+using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.Dafny;
 
@@ -72,4 +74,11 @@ public class DatatypeValue : Expression, IHasReferences, ICloneable<DatatypeValu
     formatter.SetMethodLikeIndent(StartToken, OwnedTokens, indentBefore);
     return true;
   }
+
+  protected DatatypeValue(Protector protector, DatatypeValue original) : base(protector, original) {
+    DatatypeName = original.DatatypeName;
+    MemberName = original.MemberName;
+    Bindings = original.Bindings.WithProtections(protector);
+  }
+  public override DatatypeValue WithProtections(Protector protector) => new(protector, this);
 }
