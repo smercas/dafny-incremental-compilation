@@ -8,7 +8,6 @@ using System.CommandLine;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Numerics;
-using static DafnyCore.IncrementalCompilation.ProtectedExtension;
 
 namespace Microsoft.Dafny;
 

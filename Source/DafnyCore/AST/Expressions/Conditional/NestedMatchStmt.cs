@@ -171,7 +171,7 @@ public class NestedMatchStmt : Statement, ICloneable<NestedMatchStmt>, ICanForma
   }
 
   protected NestedMatchStmt(Protector protector, NestedMatchStmt original) : base(protector, original) {
-    Source = original.Source.AsProtected();
+    Source = original.Source.WithProtections(protector);
     Cases = original.Cases.ConvertAll(c => c.WithProtections(protector));
     UsesOptionalBraces = original.UsesOptionalBraces;
   }

@@ -38,7 +38,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     ProtectToProveApplySuffix.ResetInstances();
     var moduleWithOldRootStuff = new ModuleSplitter(Options).Split(Program);
     ProtectToProveApplySuffix.AssignEntryPoints();
-    moduleWithOldRootStuff.Protect();
+    new Protector().Protect(moduleWithOldRootStuff);
     AddProtectorsModule();
     new ProtectorsImporter(Options).ImportIn(moduleWithOldRootStuff); // importing in this module transfers the imports to all the other modules
 
