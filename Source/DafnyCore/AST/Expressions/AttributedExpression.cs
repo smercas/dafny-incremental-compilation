@@ -54,6 +54,7 @@ public class AttributedExpression : NodeWithOrigin, IAttributeBearingDeclaration
             ChangeContext = new ProtectToProveApplySuffix.ChangeContext(protector.MostRecentContext),
           })
         )),
+      Kind.Invariant or
       Kind.Ensures or null => CreateFrom(E.WithProtections(protector)),
       _ => throw new UnreachableException(),
     };

@@ -70,9 +70,10 @@ public class MapComprehension : ComprehensionExpr, ICloneable<MapComprehension> 
     }
   }
 
-  protected MapComprehension(Protector protector, MapComprehension original) : base(protector, original) {
-    TermLeft = original.TermLeft?.WithProtections(protector);
+  protected MapComprehension(Protector protector, MapComprehension original, Options options) : base(protector, original, options) {
+    TermLeft = original.TermLeft?.WithProtections(protector); // IPMTODO: revisit protection
     Finite = original.Finite;
   }
-  public override MapComprehension WithProtections(Protector protector) => new(protector, this);
+  public override MapComprehension WithProtections(Protector protector) => WithProtections(protector, Options.Default);
+  public override MapComprehension WithProtections(Protector protector, Options options) => new(protector, this, options);
 }

@@ -40,9 +40,10 @@ public class SetComprehension : ComprehensionExpr, ICloneable<SetComprehension> 
     Finite = finite;
   }
 
-  protected SetComprehension(Protector protector, SetComprehension original) : base(protector, original) {
-    TermIsImplicit |= original.TermIsImplicit;
+  protected SetComprehension(Protector protector, SetComprehension original, Options options) : base(protector, original, options) {
+    TermIsImplicit |= original.TermIsImplicit; // IPMTODO: revisit protection
     Finite = original.Finite;
   }
-  public override SetComprehension WithProtections(Protector protector) => new(protector, this);
+  public override SetComprehension WithProtections(Protector protector) => WithProtections(protector, Options.Default);
+  public override SetComprehension WithProtections(Protector protector, Options options) => new(protector, this, options);
 }

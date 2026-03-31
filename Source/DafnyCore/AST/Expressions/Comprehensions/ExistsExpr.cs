@@ -62,6 +62,7 @@ public class ExistsExpr : QuantifierExpr, ICloneable<ExistsExpr> {
     return ex;
   }
 
-  protected ExistsExpr(Protector protector, ExistsExpr original) : base(protector, original) { }
-  public override ExistsExpr WithProtections(Protector protector) => new(protector, this);
+  protected ExistsExpr(Protector protector, ExistsExpr original, Options options) : base(protector, original, options) { }
+  public override ExistsExpr WithProtections(Protector protector) => WithProtections(protector, Options.Default);
+  public override ExistsExpr WithProtections(Protector protector, Options options) => new(protector, this, options);
 }

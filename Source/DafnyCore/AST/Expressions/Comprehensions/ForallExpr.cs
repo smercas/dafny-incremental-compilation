@@ -32,6 +32,7 @@ public class ForallExpr : QuantifierExpr, ICloneable<ForallExpr> {
     return body;
   }
 
-  protected ForallExpr(Protector protector, ForallExpr original) : base(protector, original) { }
-  public override ForallExpr WithProtections(Protector protector) => new(protector, this);
+  protected ForallExpr(Protector protector, ForallExpr original, Options options) : base(protector, original, options) { }
+  public override ForallExpr WithProtections(Protector protector) => WithProtections(protector, Options.Default);
+  public override ForallExpr WithProtections(Protector protector, Options options) => new(protector, this, options);
 }

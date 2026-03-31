@@ -93,8 +93,9 @@ public class LambdaExpr : ComprehensionExpr, ICloneable<LambdaExpr>, IFrameScope
 
   public string Designator => "lambda";
 
-  protected LambdaExpr(Protector protector, LambdaExpr original) : base(protector, original) {
-    Reads = original.Reads.WithProtections(protector);
+  protected LambdaExpr(Protector protector, LambdaExpr original, Options options) : base(protector, original, options) {
+    Reads = original.Reads.WithProtections(protector); // IPMTODO: revisit protection
   }
-  public override LambdaExpr WithProtections(Protector protector) => new(protector, this);
+  public override LambdaExpr WithProtections(Protector protector) => WithProtections(protector, Options.Default);
+  public override LambdaExpr WithProtections(Protector protector, Options options) => new(protector, this, options);
 }

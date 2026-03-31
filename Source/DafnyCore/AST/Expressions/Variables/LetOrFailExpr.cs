@@ -49,7 +49,7 @@ public class LetOrFailExpr : ConcreteSyntaxExpression, ICloneable<LetOrFailExpr>
     Body = original.Body.WithProtections(protector);
     if (original.Lhs is not null) {
       Lhs = Lhs!.WithProtections(protector);
-      Body = Body.WithPrependedAssertions(original.Lhs.Var.ToProtectAssertion());
+      Body = Body.WithPrependedAssertions(Lhs.Var.ToProtectAssertion());
     }
   }
   public override LetOrFailExpr WithProtections(Protector protector) => new(protector, this);

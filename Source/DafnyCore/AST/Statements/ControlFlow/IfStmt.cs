@@ -1,6 +1,7 @@
 #nullable enable
 using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
@@ -146,9 +147,16 @@ public class IfStmt : LabeledStatement, ICloneable<IfStmt>, ICanFormat {
   protected IfStmt(Protector protector, IfStmt original) : base(protector, original) {
     IsBindingGuard = original.IsBindingGuard;
     Guard = original.Guard?.WithProtections(protector);
-    Thn = IsBindingGuard switch {
-      true => original.Thn.WithProtections(protector, (Guard as ComprehensionExpr)!.BoundVars.Select(bv => bv.ToProtectAssertion())), // determined from parser that `Guard` is an `ExistsExpr`, hope this doesn't change
-      false => original.Thn.WithProtections(protector),
+    (Guard, Thn) = (original.IsBindingGuard, original.Guard) switch {
+      (false, _) => (
+        original.Guard?.WithProtections(protector),
+        original.Thn.WithProtections(protector)
+      ),
+      (true, ExistsExpr { Range: null } guard) => (
+        guard.WithProtections(protector, ComprehensionExpr.Options.Empty),
+        original.Thn.WithProtections(protector, guard.BoundVars.Select(bv => bv.ToProtectAssertion()))
+      ),
+      _ => throw new UnreachableException(),
     };
     Els = original.Els?.WithProtections(protector);
   }

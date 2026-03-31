@@ -1,5 +1,6 @@
 using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
@@ -45,8 +46,17 @@ public class GuardedAlternative : NodeWithOrigin, IAttributeBearingDeclaration, 
 
   protected GuardedAlternative(Protector protector, GuardedAlternative original) : base(protector, original) {
     IsBindingGuard = original.IsBindingGuard;
-    Guard = original.Guard.WithProtections(protector);
-    Body = [.. original.Body.WithProtections(protector)];
+    (Guard, Body) = (original.IsBindingGuard, original.Guard) switch {
+      (false, _) => (
+        original.Guard.WithProtections(protector),
+        original.Body.WithProtections(protector).ToList()
+      ),
+      (true, ExistsExpr { Range: null } guard) => (
+        guard.WithProtections(protector, ComprehensionExpr.Options.Empty),
+        [.. guard.BoundVars.Select(bv => bv.ToProtectAssertion()), .. original.Body.WithProtections(protector)]
+      ),
+      _ => throw new UnreachableException(),
+    };
     Attributes = protector.Clone(original.Attributes);
   }
   public GuardedAlternative WithProtections(Protector protector) => new(protector, this);

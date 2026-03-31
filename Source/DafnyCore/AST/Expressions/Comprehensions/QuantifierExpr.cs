@@ -114,8 +114,9 @@ public abstract class QuantifierExpr : ComprehensionExpr, TypeParameter.ParentTy
     }
   }
 
-  protected QuantifierExpr(Protector protector, QuantifierExpr original) : base(protector, original) {
+  protected QuantifierExpr(Protector protector, QuantifierExpr original, Options options) : base(protector, original, options) {
     UniqueId = FreshQuantId();
   }
-  public abstract override QuantifierExpr WithProtections(Protector protector);
+  public override QuantifierExpr WithProtections(Protector protector) => WithProtections(protector, Options.Default);
+  public abstract override QuantifierExpr WithProtections(Protector protector, Options options);
 }

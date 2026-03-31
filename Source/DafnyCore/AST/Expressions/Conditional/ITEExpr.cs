@@ -1,5 +1,6 @@
 using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
@@ -124,7 +125,11 @@ public class ITEExpr : Expression, ICanFormat, ICloneable<ITEExpr> {
 
   protected ITEExpr(Protector protector, ITEExpr original) : base(protector, original) {
     IsBindingGuard = original.IsBindingGuard;
-    Test = original.Test.WithProtections(protector);
+    Test = (original.IsBindingGuard, original.Test) switch {
+      (false, _) => original.Test.WithProtections(protector),
+      (true, ExistsExpr { Range: null } test) => test.WithProtections(protector, ComprehensionExpr.Options.Empty),
+      _ => throw new UnreachableException(),
+    };
     Thn = original.Thn.WithProtections(protector); // if `IsBindingGuard` is true then `Thn` is a `LetExpr` and already protects the bindings
     Els = original.Els?.WithProtections(protector);
   }
