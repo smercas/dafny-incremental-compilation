@@ -77,12 +77,14 @@ public static class VerifyCommand {
 
   public sealed record PrintAllProcessedDafnyCode : IncrementalCompCommand;
   public abstract record PrintSomeProcessedDafnyCode : IncrementalCompCommand;
-  public sealed record PrintProcessedDafnyCodeThatWasChanged : PrintSomeProcessedDafnyCode;
+  public sealed record PrintProcessedDafnyCodeOfChangedVerificationTasks : PrintSomeProcessedDafnyCode;
   public sealed record PrintProcessedDafnyCodeOfEntryPoints(IReadOnlyList<int> EntryPoints) : PrintSomeProcessedDafnyCode;
+  public sealed record PrintProcessedDafnyCodeOfSymbols(IReadOnlyList<IReadOnlyList<string>> SymbolNames) : PrintSomeProcessedDafnyCode;
   public sealed record PrintAllBoogieCode : IncrementalCompCommand;
-  public sealed record PrintBoogieCodeOfModules(IReadOnlyList<string> ModuleNames) : IncrementalCompCommand;
+  public sealed record PrintBoogieCodeOfChangedVerificationTasks : IncrementalCompCommand;
+  public sealed record PrintBoogieCodeOfModules(IReadOnlyList<IReadOnlyList<string>> ModuleNames) : IncrementalCompCommand;
   public sealed record GenerateAllSMT2 : IncrementalCompCommand;
-  public sealed record GenerateNeededSMT2 : IncrementalCompCommand;
+  public sealed record GenerateSMT2OfChangedVerificationTasks : IncrementalCompCommand;
 
   public static async Task<int> HandleVerification(DafnyOptions options) {
     options.NormalizeNames = false;
@@ -161,19 +163,27 @@ public static class VerifyCommand {
                 "",
                 "Commands:",
                 "  :q                 Quit the program.",
-                "  :ad                 Print the processed Dafny code to the console",
-                "                   (for debugging purposes).",
-                "  :d                  Same as ':d', but restricted to the modified verification tasks.",
-                "  :d (<index> )*      Same as ':d', but restricted to the verification tasks that",
-                "                   contain the provided indexes. Indexes must be passed as integers",
+                "  :ad                Print the entirety of the processed Dafny code",
+                "                   to the console (for debugging purposes).",
+                "  :d                 Print the processed Dafny code of the modified",
+                "                   verification tasks.",
+                "  :d i (<index> )*   Print the processed Dafny code of the verification",
+                "                   tasks that contain the provided indexes. Indexes",
+                "                   must be passed as integers separated by only one",
+                "                   space.",
+                "  :d s (<symbol> )*  Print the processed Dafny code of the specified",
+                "                   symbol. Symbols must be separated by only one",
+                "                   space.",
+                "  :ab                Print the translation from Dafny code to Boogie",
+                "                   code to the console (for debugging purposes).",
+                "  :b                 Print the translation from Dafny code to Boogie",
+                "                   code of the modified modules.",
+                "  :b m (<module> )*  Print the translation from Dafny code to Boogie",
+                "                   code of the specified modules. Modules must be",
                 "                   separated by only one space.",
-                "  :ab                 Print the translation from Dafny code to Boogie code to",
-                "                   the console (for debugging purposes).",
-                "  :b (<module> )*    Same as ':b', but restricted to the specified modules. Modules",
-                "                   must be separated by only one space",
                 "  :as                (DEFAULT) Generate all SMT2 files.",
-                "  :s                 Generate only the SMT2 files that need regeneration based on the",
-                "                   provided modifications.",
+                "  :s                 Generate only the SMT2 files that need regeneration", // TODO: this should be the default
+                "                   based on the provided modifications.",
                 ""
               );
               break;
@@ -181,24 +191,31 @@ public static class VerifyCommand {
               options.Set(IncCompCommand, new PrintAllProcessedDafnyCode());
               return modifications;
             case ":d":
-              options.Set(IncCompCommand, new PrintProcessedDafnyCodeThatWasChanged());
+              options.Set(IncCompCommand, new PrintProcessedDafnyCodeOfChangedVerificationTasks());
+              return modifications;
+            case ":ab":
+              options.Set(IncCompCommand, new PrintAllBoogieCode());
               return modifications;
             case ":b":
-              options.Set(IncCompCommand, new PrintAllBoogieCode());
+              options.Set(IncCompCommand, new PrintBoogieCodeOfChangedVerificationTasks());
               return modifications;
             case ":as" or "":
               options.Set(IncCompCommand, new GenerateAllSMT2());
               return modifications;
             case ":s":
-              options.Set(IncCompCommand, new GenerateNeededSMT2());
+              options.Set(IncCompCommand, new GenerateSMT2OfChangedVerificationTasks());
               return modifications;
             default:
-              if (modification.StartsWith(":d ")) {
-                options.Set(IncCompCommand, new PrintProcessedDafnyCodeOfEntryPoints([.. modification[":d ".Length..].Split(' ').Select(int.Parse)]));
+              if (modification.StartsWith(":d i ")) {
+                options.Set(IncCompCommand, new PrintProcessedDafnyCodeOfEntryPoints(modification[":d i ".Length..].Split(' ').ConvertAll(int.Parse)));
                 return modifications;
               }
-              if (modification.StartsWith(":b ")) {
-                options.Set(IncCompCommand, new PrintBoogieCodeOfModules([.. modification[":b ".Length..].Split(' ')]));
+              if (modification.StartsWith(":d s ")) {
+                options.Set(IncCompCommand, new PrintProcessedDafnyCodeOfSymbols(modification[":d s ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
+                return modifications;
+              }
+              if (modification.StartsWith(":b m ")) {
+                options.Set(IncCompCommand, new PrintBoogieCodeOfModules(modification[":b m ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
                 return modifications;
               }
               modifications.Add(modification);
@@ -236,9 +253,29 @@ public static class VerifyCommand {
             case PrintAllProcessedDafnyCode:
               new Printer(options.BaseOutputWriter, options).PrintProgram(resolution.ResolvedProgram, true);
               break;
+            case PrintProcessedDafnyCodeOfSymbols { SymbolNames: var symbolNames }:
+              var printer = new Printer(options.BaseOutputWriter, options);
+              foreach (var toPrint in symbolNames.Select(sns => {
+                LiteralModuleDecl result = resolution.ResolvedProgram.DefaultModule;
+                foreach (var sn in sns.SkipLast(1)) {
+                  result = result.ChildSymbols.OfType<LiteralModuleDecl>().First(tld => tld.Name == sn);
+                }
+                return result.ChildSymbols.First(tld => (tld as Declaration)!.Name == sns[^1]);
+              })) {
+                switch (toPrint) {
+                  case MemberDecl memberDecl:
+                    printer.PrintMembers([memberDecl], 0, options.DafnyProject);
+                    break;
+                  case TopLevelDecl topLevelDecl:
+                    printer.PrintTopLevelDecls(resolution.ResolvedProgram.Compilation, [topLevelDecl], 0, null);
+                    break;
+                  default: throw new UnreachableException();
+                }
+              }
+              break;
             case PrintSomeProcessedDafnyCode printSomeProcessedDafnyCode:
               Func<(Change<WF> WF, Change<ProofHint> ProofHint), int, bool> filter = printSomeProcessedDafnyCode switch {
-                PrintProcessedDafnyCodeThatWasChanged => static (c, _) => !(c.WF.IsEmptyChange && c.ProofHint.IsEmptyChange),
+                PrintProcessedDafnyCodeOfChangedVerificationTasks => static (c, _) => !(c.WF.IsEmptyChange && c.ProofHint.IsEmptyChange),
                 PrintProcessedDafnyCodeOfEntryPoints { EntryPoints: var entryPoints } => (_, i) => entryPoints.Contains(i),
                 _ => throw new UnreachableException(),
               };
@@ -252,7 +289,6 @@ public static class VerifyCommand {
               break;
             default:
               verificationResults = new();
-              Console.ResetColor();
               ReportVerificationDiagnostics(compilation, verificationResults);
               verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
               proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
