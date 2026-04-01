@@ -20,11 +20,11 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
   /// this resolver serializes all invocations.
   /// </remarks>
   public class DafnyLangSymbolResolver : ISymbolResolver {
-    public abstract record CachingMode {
-      public sealed record None : CachingMode;
-      public sealed record HashBased : CachingMode;
-      public sealed record Incremental(IEnumerable<(string?, string?)> modifications) : CachingMode;
-      public static CachingMode Default() => new None();
+    public enum CachingMode {
+      None,
+      HashBased,
+      Incremental,
+      Default = None,
     }
     public static readonly Option<CachingMode> CachingType = new(
       name: "--caching-type",
@@ -33,12 +33,12 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
         var token = result.Tokens[0].Value;
         if (token.ToLowerInvariant() is not ("none" or "hash" or "incremental")) {
           result.ErrorMessage = $"Invalid caching mode '{token}' (expected: none, hash or incremental)";
-          return CachingMode.Default();
+          return CachingMode.Default;
         }
         return token.ToLowerInvariant() switch {
-          "none" => new CachingMode.None(),
-          "hash" => new CachingMode.HashBased(),
-          "incremental" => new CachingMode.Incremental([]),
+          "none" => CachingMode.None,
+          "hash" => CachingMode.HashBased,
+          "incremental" => CachingMode.Incremental,
           _ => throw new UnreachableException()
         };
       }
@@ -47,7 +47,7 @@ namespace Microsoft.Dafny.LanguageServer.Language.Symbols {
       IsHidden = true
     };
     static DafnyLangSymbolResolver() {
-      CachingType.SetDefaultValueFactory(static () => new CachingMode.HashBased()); // same semantics as before
+      CachingType.SetDefaultValueFactory(static () => CachingMode.HashBased); // same semantics as before
     }
 
     private readonly ILogger logger;

@@ -1,5 +1,6 @@
 #nullable enable
 using DafnyCore;
+using DafnyCore.IncrementalCompilation;
 using DafnyCore.Options;
 using DafnyDriver.Commands;
 using Microsoft.Boogie;
@@ -7,6 +8,7 @@ using Microsoft.Dafny.Compilers;
 using Microsoft.Dafny.LanguageServer.Language.Symbols;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.CommandLine;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
@@ -17,8 +19,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using DafnyCore.IncrementalCompilation;
-using System.Collections.Immutable;
+using static Microsoft.Dafny.LanguageServer.Language.Symbols.DafnyLangSymbolResolver;
 using Position = OmniSharp.Extensions.LanguageServer.Protocol.Models.Position;
 
 namespace Microsoft.Dafny;
@@ -44,6 +45,13 @@ public static class VerifyCommand {
   public static readonly Option<string> FilterPosition = new("--filter-position",
     @"Filter what gets verified based on a source location. The location is specified as a file path suffix, optionally followed by a colon and a line number or line range. For example, `dafny verify dfyconfig.toml --filter-position=source1.dfy:5-7` will only verify things that between (and including) line 5 and 7 in the file `source1.dfy`. You can also use `:5`, `:5-`, `:-5` to specify individual lines or open ranges. In combination with `--isolate-assertions`, individual assertions can be verified by filtering on the line that contains them. When processing a single file, the filename can be skipped, for example: `dafny verify MyFile.dfy --filter-position=:23`");
 
+  public static readonly Option<IncrementalCompCommand> IncCompCommand = new(
+      name: "--inc-com-command"
+    ) {
+    Arity = ArgumentArity.ExactlyOne,
+    IsHidden = true
+  };
+
   public static Command Create() {
     var result = new Command("verify", "Verify the program.");
     result.AddArgument(DafnyCommands.FilesArgument);
@@ -64,15 +72,25 @@ public static class VerifyCommand {
       Concat(DafnyCommands.ConsoleOutputOptions).
       Concat(DafnyCommands.ResolverOptions);
 
+
+  public abstract record IncrementalCompCommand;
+
+  public sealed record PrintAllProcessedDafnyCode : IncrementalCompCommand;
+  public abstract record PrintSomeProcessedDafnyCode : IncrementalCompCommand;
+  public sealed record PrintProcessedDafnyCodeThatWasChanged : PrintSomeProcessedDafnyCode;
+  public sealed record PrintProcessedDafnyCodeOfEntryPoints(IReadOnlyList<int> EntryPoints) : PrintSomeProcessedDafnyCode;
+  public sealed record PrintAllBoogieCode : IncrementalCompCommand;
+  public sealed record PrintBoogieCodeOfModules(IReadOnlyList<string> ModuleNames) : IncrementalCompCommand;
+  public sealed record GenerateAllSMT2 : IncrementalCompCommand;
+  public sealed record GenerateNeededSMT2 : IncrementalCompCommand;
+
   public static async Task<int> HandleVerification(DafnyOptions options) {
     options.NormalizeNames = false;
     if (options.Get(CommonOptionBag.VerificationCoverageReport) != null) {
       options.TrackVerificationCoverage = true;
     }
-    void WriteChanges(IEnumerable<(string?, string?)> changes) {
-      options.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(changes));
-    }
-    WriteChanges([]);
+    options.Set(CachingType, CachingMode.Incremental);
+    options.Set(IncCompCommand, new GenerateAllSMT2());
     var compilation = CliCompilation.Create(options);
     compilation.Start();
 
@@ -95,9 +113,11 @@ public static class VerifyCommand {
         await using var trailer = options.OutputWriter.StatusWriter();
         await trailer.WriteAsync(message);
       }
-      async Task WriteLine(string message) {
+      async Task WriteLine(params string[] messages) {
         await using var trailer = options.OutputWriter.StatusWriter();
-        await trailer.WriteLineAsync(message);
+        foreach (var message in messages) {
+          await trailer.WriteLineAsync(message);
+        }
       }
       int AbsPositionFrom(IEnumerable<string> split, Position pos) => split.Take(pos.Line - 1).Sum(s => s.Length) + pos.Character - 1;
       IEnumerable<(string?, string?)> ParseChanges(IEnumerable<string> ss) {
@@ -124,19 +144,72 @@ public static class VerifyCommand {
       async Task<List<string>?> ReadChanges() {
         List<string> modifications = [];
         while (true) {
-          await Write("Enter modification (or type `:q` to exit, send an empty line to finish inputting modifications): ");
+          await Write("Enter modification or command (type `:h` for help): ");
           var modification = (await options.Input.ReadLineAsync())!;
-          if (modification is null or ":q") { return null; }
-          if (modification is "") { return modifications; }
-          modifications.Add(modification);
+          switch (modification) {
+            case null or ":q": return null;
+            case ":h":
+              string sep = new('=', 72);
+              await WriteLine(
+                sep,
+                "Command Input Help",
+                sep,
+                "",
+                "Usage:",
+                "  ((<index>(wf|ph): <modification> | :h)\\n)* <command>",
+                "",
+                "",
+                "Commands:",
+                "  :q                 Quit the program.",
+                "  :ad                 Print the processed Dafny code to the console",
+                "                   (for debugging purposes).",
+                "  :d                  Same as ':d', but restricted to the modified verification tasks.",
+                "  :d (<index> )*      Same as ':d', but restricted to the verification tasks that",
+                "                   contain the provided indexes. Indexes must be passed as integers",
+                "                   separated by only one space.",
+                "  :ab                 Print the translation from Dafny code to Boogie code to",
+                "                   the console (for debugging purposes).",
+                "  :b (<module> )*    Same as ':b', but restricted to the specified modules. Modules",
+                "                   must be separated by only one space",
+                "  :as                (DEFAULT) Generate all SMT2 files.",
+                "  :s                 Generate only the SMT2 files that need regeneration based on the",
+                "                   provided modifications.",
+                ""
+              );
+              break;
+            case ":ad":
+              options.Set(IncCompCommand, new PrintAllProcessedDafnyCode());
+              return modifications;
+            case ":d":
+              options.Set(IncCompCommand, new PrintProcessedDafnyCodeThatWasChanged());
+              return modifications;
+            case ":b":
+              options.Set(IncCompCommand, new PrintAllBoogieCode());
+              return modifications;
+            case ":as" or "":
+              options.Set(IncCompCommand, new GenerateAllSMT2());
+              return modifications;
+            case ":s":
+              options.Set(IncCompCommand, new GenerateNeededSMT2());
+              return modifications;
+            default:
+              if (modification.StartsWith(":d ")) {
+                options.Set(IncCompCommand, new PrintProcessedDafnyCodeOfEntryPoints([.. modification[":d ".Length..].Split(' ').Select(int.Parse)]));
+                return modifications;
+              }
+              if (modification.StartsWith(":b ")) {
+                options.Set(IncCompCommand, new PrintBoogieCodeOfModules([.. modification[":b ".Length..].Split(' ')]));
+                return modifications;
+              }
+              modifications.Add(modification);
+              break;
+          }
         }
       }
       while (true) {
         var modifications = await ReadChanges();
         if (modifications is null) { break; }
-        var parsed = ParseChanges(modifications);
-        WriteChanges(parsed);
-        ProtectToProveApplySuffix.ChangeTexts = parsed;
+        ProtectToProveApplySuffix.ChangeTexts = ParseChanges(modifications);
         compilation = CliCompilation.Create(options, compilation);
         compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
           var changesPerFile = ProtectToProveApplySuffix.ChangesFlattened
@@ -159,18 +232,37 @@ public static class VerifyCommand {
         resolution = await compilation.Resolution;
 
         if (resolution is { HasErrors: false }) {
-          verificationResults = new();
-
-          Console.ResetColor();
-          ReportVerificationDiagnostics(compilation, verificationResults);
-          verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
-          proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
-          verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
-          compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
-          await verificationSummarized;
-          await verificationResultsLogged;
-          await proofDependenciesReported;
-          //new Printer(options.BaseOutputWriter, options).PrintProgram(resolution.ResolvedProgram, true);
+          switch (options.Get(IncCompCommand)) {
+            case PrintAllProcessedDafnyCode:
+              new Printer(options.BaseOutputWriter, options).PrintProgram(resolution.ResolvedProgram, true);
+              break;
+            case PrintSomeProcessedDafnyCode printSomeProcessedDafnyCode:
+              Func<(Change<WF> WF, Change<ProofHint> ProofHint), int, bool> filter = printSomeProcessedDafnyCode switch {
+                PrintProcessedDafnyCodeThatWasChanged => static (c, _) => !(c.WF.IsEmptyChange && c.ProofHint.IsEmptyChange),
+                PrintProcessedDafnyCodeOfEntryPoints { EntryPoints: var entryPoints } => (_, i) => entryPoints.Contains(i),
+                _ => throw new UnreachableException(),
+              };
+              new Printer(options.BaseOutputWriter, options).PrintMembers(
+                [.. ProtectToProveApplySuffix.Changes.Where(filter)
+                                                     .Select(static c => c.WF)
+                                                     .OfType<IChangeToMemberDecl>()
+                                                     .Select(static c => c.MemberDecl)
+                                                     .Distinct()],
+              0, options.DafnyProject);
+              break;
+            default:
+              verificationResults = new();
+              Console.ResetColor();
+              ReportVerificationDiagnostics(compilation, verificationResults);
+              verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
+              proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
+              verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
+              compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
+              await verificationSummarized;
+              await verificationResultsLogged;
+              await proofDependenciesReported;
+              break;
+          }
         }
         //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();
       }

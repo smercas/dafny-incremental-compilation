@@ -19,6 +19,7 @@ namespace Microsoft.Dafny;
 public abstract class ChangeKind;
 public sealed class WF : ChangeKind;
 public sealed class ProofHint : ChangeKind;
+
 public abstract class Change(Uri uri, Range range) {
   public static Comparer<Change> Comparer { get; } = Comparer<Change>.Create(static (l, r) => { // IPMTODO: revisit when testing
     static bool Consecutive(Position first, params Position[] positions) =>
@@ -50,8 +51,10 @@ public abstract class Change(Uri uri, Range range) {
   public bool IsEmptyChange => Text is null;
 }
 public abstract class Change<CK>(Uri uri, Range range) : Change(uri, range) where CK : ChangeKind;
-public abstract class ChangeToMemberDecl<CK, MD, ABD>(MD memberDecl, Uri uri, Range range) : Change<CK>(uri, range) where CK : ChangeKind where MD : MemberDecl where ABD : IAttributeBearingDeclaration {
+public interface IChangeToMemberDecl { public MemberDecl MemberDecl { get; } }
+public abstract class ChangeToMemberDecl<CK, MD, ABD>(MD memberDecl, Uri uri, Range range) : Change<CK>(uri, range), IChangeToMemberDecl where CK : ChangeKind where MD : MemberDecl where ABD : IAttributeBearingDeclaration {
   public MD MemberDecl { get; private set; } = memberDecl;
+  MemberDecl IChangeToMemberDecl.MemberDecl => MemberDecl;
   public override ModuleDecl AffectedModuleDecl => MemberDecl.EnclosingClass.EnclosingModuleDefinition.EnclosingLiteralModuleDecl!;
 
   public virtual void Update(MD memberDecl, ABD attributeBearingDeclaration) {

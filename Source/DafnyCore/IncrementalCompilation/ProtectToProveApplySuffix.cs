@@ -93,6 +93,7 @@ namespace DafnyCore.IncrementalCompilation {
         if (changedModulesNeedToBeReset) { ResetChangedModulesLazy(); }
       }
     }
+    public const int ChangeTypesCount = 2;
     public static IReadOnlyList<(Change<WF> WF, Change<ProofHint> ProofHint)> Changes => changes.Value;
     private static IEnumerable<Change> ChangesFlattener((Change<WF> WF, Change<ProofHint> ProofHint) changePair) { yield return changePair.WF; yield return changePair.ProofHint; }
     // since `Changes` are constructed once, `ChangesFlattened` can also be constructed once
