@@ -45,12 +45,6 @@ public static class VerifyCommand {
   public static readonly Option<string> FilterPosition = new("--filter-position",
     @"Filter what gets verified based on a source location. The location is specified as a file path suffix, optionally followed by a colon and a line number or line range. For example, `dafny verify dfyconfig.toml --filter-position=source1.dfy:5-7` will only verify things that between (and including) line 5 and 7 in the file `source1.dfy`. You can also use `:5`, `:5-`, `:-5` to specify individual lines or open ranges. In combination with `--isolate-assertions`, individual assertions can be verified by filtering on the line that contains them. When processing a single file, the filename can be skipped, for example: `dafny verify MyFile.dfy --filter-position=:23`");
 
-  public static readonly Option<IncrementalCompCommand> IncCompCommand = new(
-      name: "--inc-com-command"
-    ) {
-    Arity = ArgumentArity.ExactlyOne,
-    IsHidden = true
-  };
 
   public static Command Create() {
     var result = new Command("verify", "Verify the program.");
@@ -73,26 +67,15 @@ public static class VerifyCommand {
       Concat(DafnyCommands.ResolverOptions);
 
 
-  public abstract record IncrementalCompCommand;
 
-  public sealed record PrintAllProcessedDafnyCode : IncrementalCompCommand;
-  public abstract record PrintSomeProcessedDafnyCode : IncrementalCompCommand;
-  public sealed record PrintProcessedDafnyCodeOfChangedVerificationTasks : PrintSomeProcessedDafnyCode;
-  public sealed record PrintProcessedDafnyCodeOfEntryPoints(IReadOnlyList<int> EntryPoints) : PrintSomeProcessedDafnyCode;
-  public sealed record PrintProcessedDafnyCodeOfSymbols(IReadOnlyList<IReadOnlyList<string>> SymbolNames) : PrintSomeProcessedDafnyCode;
-  public sealed record PrintAllBoogieCode : IncrementalCompCommand;
-  public sealed record PrintBoogieCodeOfChangedVerificationTasks : IncrementalCompCommand;
-  public sealed record PrintBoogieCodeOfModules(IReadOnlyList<IReadOnlyList<string>> ModuleNames) : IncrementalCompCommand;
-  public sealed record GenerateAllSMT2 : IncrementalCompCommand;
-  public sealed record GenerateSMT2OfChangedVerificationTasks : IncrementalCompCommand;
-
+  
   public static async Task<int> HandleVerification(DafnyOptions options) {
     options.NormalizeNames = false;
     if (options.Get(CommonOptionBag.VerificationCoverageReport) != null) {
       options.TrackVerificationCoverage = true;
     }
     options.Set(CachingType, CachingMode.Incremental);
-    options.Set(IncCompCommand, new GenerateAllSMT2());
+    options.Set(IncCompCommand.Option, new GenerateAllSMT2Code());
     var compilation = CliCompilation.Create(options);
     compilation.Start();
 
@@ -181,41 +164,41 @@ public static class VerifyCommand {
                 "  :b m (<module> )*  Print the translation from Dafny code to Boogie",
                 "                   code of the specified modules. Modules must be",
                 "                   separated by only one space.",
-                "  :as                (DEFAULT) Generate all SMT2 files.",
-                "  :s                 Generate only the SMT2 files that need regeneration", // TODO: this should be the default
-                "                   based on the provided modifications.",
+                "  :as                Generate all SMT2 files.",
+                "  :s                 (DEFAULT) Generate only the SMT2 files that need",
+                "                   regeneration based on the provided modifications.",
                 ""
               );
               break;
             case ":ad":
-              options.Set(IncCompCommand, new PrintAllProcessedDafnyCode());
+              options.Set(IncCompCommand.Option, new PrintAllProcessedDafnyCode());
               return modifications;
             case ":d":
-              options.Set(IncCompCommand, new PrintProcessedDafnyCodeOfChangedVerificationTasks());
+              options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfChangedVerificationTasks());
               return modifications;
             case ":ab":
-              options.Set(IncCompCommand, new PrintAllBoogieCode());
+              options.Set(IncCompCommand.Option, new PrintAllBoogieCode());
               return modifications;
             case ":b":
-              options.Set(IncCompCommand, new PrintBoogieCodeOfChangedVerificationTasks());
+              options.Set(IncCompCommand.Option, new PrintBoogieCodeOfChangedVerificationTasks());
               return modifications;
             case ":as" or "":
-              options.Set(IncCompCommand, new GenerateAllSMT2());
+              options.Set(IncCompCommand.Option, new GenerateAllSMT2Code());
               return modifications;
             case ":s":
-              options.Set(IncCompCommand, new GenerateSMT2OfChangedVerificationTasks());
+              options.Set(IncCompCommand.Option, new GenerateSMT2CodeOfChangedVerificationTasks());
               return modifications;
             default:
               if (modification.StartsWith(":d i ")) {
-                options.Set(IncCompCommand, new PrintProcessedDafnyCodeOfEntryPoints(modification[":d i ".Length..].Split(' ').ConvertAll(int.Parse)));
+                options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfEntryPoints(modification[":d i ".Length..].Split(' ').ConvertAll(int.Parse)));
                 return modifications;
               }
               if (modification.StartsWith(":d s ")) {
-                options.Set(IncCompCommand, new PrintProcessedDafnyCodeOfSymbols(modification[":d s ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
+                options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfSymbols(modification[":d s ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
                 return modifications;
               }
               if (modification.StartsWith(":b m ")) {
-                options.Set(IncCompCommand, new PrintBoogieCodeOfModules(modification[":b m ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
+                options.Set(IncCompCommand.Option, new PrintBoogieCodeOfModules(modification[":b m ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
                 return modifications;
               }
               modifications.Add(modification);
@@ -223,9 +206,16 @@ public static class VerifyCommand {
           }
         }
       }
+      var originalBoogieFile = options.Get(DeveloperOptionBag.BoogiePrint);
       while (true) {
         var modifications = await ReadChanges();
         if (modifications is null) { break; }
+        if (options.Get(IncCompCommand.Option) is PrintAllBoogieCode or PrintBoogieCodeOfModules or PrintBoogieCodeOfChangedVerificationTasks) {
+          options.Set(DeveloperOptionBag.BoogiePrint, "-");
+        } else {
+          options.Set(DeveloperOptionBag.BoogiePrint, originalBoogieFile);
+        }
+        options.ApplyBinding(DeveloperOptionBag.BoogiePrint);
         ProtectToProveApplySuffix.ChangeTexts = ParseChanges(modifications);
         compilation = CliCompilation.Create(options, compilation);
         compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
@@ -249,55 +239,63 @@ public static class VerifyCommand {
         resolution = await compilation.Resolution;
 
         if (resolution is { HasErrors: false }) {
-          switch (options.Get(IncCompCommand)) {
-            case PrintAllProcessedDafnyCode:
-              new Printer(options.BaseOutputWriter, options).PrintProgram(resolution.ResolvedProgram, true);
-              break;
-            case PrintProcessedDafnyCodeOfSymbols { SymbolNames: var symbolNames }:
-              var printer = new Printer(options.BaseOutputWriter, options);
-              foreach (var toPrint in symbolNames.Select(sns => {
-                LiteralModuleDecl result = resolution.ResolvedProgram.DefaultModule;
-                foreach (var sn in sns.SkipLast(1)) {
-                  result = result.ChildSymbols.OfType<LiteralModuleDecl>().First(tld => tld.Name == sn);
-                }
-                return result.ChildSymbols.First(tld => (tld as Declaration)!.Name == sns[^1]);
-              })) {
-                switch (toPrint) {
-                  case MemberDecl memberDecl:
-                    printer.PrintMembers([memberDecl], 0, options.DafnyProject);
+          if (options.Get(IncCompCommand.Option) is GenerateBoogie) {
+            verificationResults = new();
+            ReportVerificationDiagnostics(compilation, verificationResults);
+            verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
+            proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
+            verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
+            compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
+            await verificationSummarized;
+            await verificationResultsLogged;
+            await proofDependenciesReported;
+          } else {
+            var printer = new Printer(options.BaseOutputWriter, options);
+            switch (options.Get(IncCompCommand.Option)) {
+              case PrintAllProcessedDafnyCode:
+                printer.PrintProgram(resolution.ResolvedProgram, true);
+                break;
+              case PrintSomeProcessedDafnyCode printSomeProcessedDafnyCode:
+                switch (printSomeProcessedDafnyCode) {
+                  case PrintProcessedDafnyCodeOfSymbols { SymbolNames: var symbolNames }:
+                    foreach (var toPrint in symbolNames.Select(sns => {
+                      LiteralModuleDecl result = resolution.ResolvedProgram.DefaultModule;
+                      foreach (var sn in sns.SkipLast(1)) {
+                        result = result.ChildSymbols.OfType<LiteralModuleDecl>().First(tld => tld.Name == sn);
+                      }
+                      return result.ChildSymbols.First(tld => (tld as Declaration)!.Name == sns[^1]);
+                    })) {
+                      switch (toPrint) {
+                        case MemberDecl memberDecl:
+                          printer.PrintMembers([memberDecl], 0, options.DafnyProject);
+                          break;
+                        case TopLevelDecl topLevelDecl:
+                          printer.PrintTopLevelDecls(resolution.ResolvedProgram.Compilation, [topLevelDecl], 0, null);
+                          break;
+                        default:
+                          throw new UnreachableException();
+                      }
+                    }
                     break;
-                  case TopLevelDecl topLevelDecl:
-                    printer.PrintTopLevelDecls(resolution.ResolvedProgram.Compilation, [topLevelDecl], 0, null);
+                  case PrintProcessedDafnyCodeOfChangedVerificationTasks:
+                    printer.PrintMembers(
+                      [.. ProtectToProveApplySuffix.ChangedMembers],
+                    0, options.DafnyProject);
+                    break;
+                  case PrintProcessedDafnyCodeOfEntryPoints { EntryPoints: var entryPoints }:
+                    printer.PrintMembers(
+                      [.. ProtectToProveApplySuffix.Changes.Where((_, i) => entryPoints.Contains(i))
+                                                         .Select(static c => c.WF)
+                                                         .OfType<IChangeToMemberDecl>()
+                                                         .Select(static c => c.MemberDecl)
+                                                         .Distinct()],
+                    0, options.DafnyProject);
                     break;
                   default: throw new UnreachableException();
                 }
-              }
-              break;
-            case PrintSomeProcessedDafnyCode printSomeProcessedDafnyCode:
-              Func<(Change<WF> WF, Change<ProofHint> ProofHint), int, bool> filter = printSomeProcessedDafnyCode switch {
-                PrintProcessedDafnyCodeOfChangedVerificationTasks => static (c, _) => !(c.WF.IsEmptyChange && c.ProofHint.IsEmptyChange),
-                PrintProcessedDafnyCodeOfEntryPoints { EntryPoints: var entryPoints } => (_, i) => entryPoints.Contains(i),
-                _ => throw new UnreachableException(),
-              };
-              new Printer(options.BaseOutputWriter, options).PrintMembers(
-                [.. ProtectToProveApplySuffix.Changes.Where(filter)
-                                                     .Select(static c => c.WF)
-                                                     .OfType<IChangeToMemberDecl>()
-                                                     .Select(static c => c.MemberDecl)
-                                                     .Distinct()],
-              0, options.DafnyProject);
-              break;
-            default:
-              verificationResults = new();
-              ReportVerificationDiagnostics(compilation, verificationResults);
-              verificationSummarized = ReportVerificationSummary(compilation, verificationResults);
-              proofDependenciesReported = ReportProofDependencies(compilation, resolution, verificationResults);
-              verificationResultsLogged = LogVerificationResults(compilation, resolution, verificationResults);
-              compilation.VerifyAllLazily().ToObservable().Subscribe(verificationResults);
-              await verificationSummarized;
-              await verificationResultsLogged;
-              await proofDependenciesReported;
-              break;
+                break;
+              case GenerateBoogie: default: throw new UnreachableException();
+            }
           }
         }
         //(compilation.Compilation.GetType().GetField("boogieEngine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(compilation.Compilation) as ExecutionEngine)!.Dispose();

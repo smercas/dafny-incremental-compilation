@@ -56,13 +56,14 @@ namespace Microsoft.Dafny.LanguageServer.Language {
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var justPrintBoogie = program.Options.Get(IncCompCommand.Option) is PrintAllBoogieCode or PrintBoogieCodeOfModules or PrintBoogieCodeOfChangedVerificationTasks;
         if (engine.Options.PrintFile != null) {
           var moduleCount = BoogieGenerator.VerifiableModules(program).Count();
           var fileName = moduleCount > 1 ? DafnyMain.BoogieProgramSuffix(engine.Options.PrintFile, suffix) : engine.Options.PrintFile;
-          ExecutionEngine.PrintBplFile(engine.Options, fileName, boogieProgram, false, false, engine.Options.PrettyPrint);
+          ExecutionEngine.PrintBplFile(engine.Options, justPrintBoogie ? new ExecutionEngine.Forced(fileName) : new ExecutionEngine.Normal(fileName), boogieProgram, false, false, engine.Options.PrettyPrint);
         }
 
-        return await engine.GetVerificationTasks(boogieProgram, cancellationToken);
+        return justPrintBoogie ? [] : await engine.GetVerificationTasks(boogieProgram, cancellationToken);
       }
       finally {
         mutex.Release();

@@ -85,9 +85,10 @@ namespace Microsoft.Dafny {
       return r;
     }
     public static bool IsExactly<T>(this T o) where T : notnull => o.GetType() == typeof(T);
-    public static IEnumerable<R> SelectWhere<T, R>(this IEnumerable<T> es, Func<T, (bool, R)> f) {
-      foreach (var e in es) {
-        (bool not_filtered_out, R result) = f(e);
+    public static IEnumerable<R> SelectWhere<T, R>(this IEnumerable<T> es, Func<T, (bool, R)> f) => es.SelectWhere((e, _) => f(e));
+    public static IEnumerable<R> SelectWhere<T, R>(this IEnumerable<T> es, Func<T, int, (bool, R)> f) {
+      foreach (var (e, i) in es.Indexed()) {
+        (bool not_filtered_out, R result) = f(e, i);
         if (!not_filtered_out) { continue; }
         yield return result;
       }

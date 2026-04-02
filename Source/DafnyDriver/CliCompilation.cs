@@ -1,4 +1,5 @@
 #nullable enable
+using DafnyCore.IncrementalCompilation;
 using IntervalTree;
 using Microsoft.Boogie;
 using Microsoft.Dafny;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -376,6 +378,30 @@ public class CliCompilation {
         result = result.Where(canVerify => canVerify.FullDafnyName.Contains(symbolFilter));
       }
     }
+
+    void applyIncCompFilter() {
+      var command = Options.Get(IncCompCommand.Option);
+      if (command is null or GenerateAllBoogie) { return; }
+      if (command is not GenerateSomeBoogie) { throw new UnreachableException(); }
+      Func<ICanVerify, bool> filter = command switch {
+        PrintBoogieCodeOfModules { ModuleNames: var moduleNames } => canVerify => {
+          static IEnumerable<ModuleDefinition> leafToRootModules(ICanVerify cv) {
+            var m = cv.ContainingModule;
+            while (m is not null && !m.IsDefaultModule) {
+              yield return m;
+              m = m.EnclosingModule;
+            }
+          }
+          var moduleNameOfCanVerify = leafToRootModules(canVerify).Reverse().Select(md => md.Name).ToList();
+          return moduleNames.Any(mn => mn.Count == moduleNameOfCanVerify.Count && mn.Zip(moduleNameOfCanVerify).All(p => p.First == p.Second));
+        },
+        GeneratedBoogieCodeOfChangedVerificationTasks => canVerify =>
+          canVerify is MemberDecl memberDecl && ProtectToProveApplySuffix.ChangedMembers.Contains(memberDecl),
+        _ => throw new UnreachableException(),
+      };
+      result = result.Where(filter);
+    }
+    applyIncCompFilter();
 
     return result.ToList();
 

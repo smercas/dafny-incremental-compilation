@@ -54,7 +54,7 @@ namespace DafnyCore.IncrementalCompilation {
           default: throw new UnreachableException(); //IPMTODO: from prior debugging, these were hit
         }
       }
-      ResetChangedModulesLazy();
+      ResetChangedModulesAndMembersLazy();
     }
     private static SortedSet<ProtectToProveApplySuffix> instances { get; set; } = new(Comparer);
     public static IReadOnlySet<ProtectToProveApplySuffix> Instances => instances;
@@ -90,21 +90,30 @@ namespace DafnyCore.IncrementalCompilation {
           changePair.ProofHint.Text = ProofHintText;
           changedModulesNeedToBeReset |= prev != (changePair.WF.IsEmptyChange, changePair.ProofHint.IsEmptyChange);
         }
-        if (changedModulesNeedToBeReset) { ResetChangedModulesLazy(); }
+        if (changedModulesNeedToBeReset) { ResetChangedModulesAndMembersLazy(); }
       }
     }
     public const int ChangeTypesCount = 2;
     public static IReadOnlyList<(Change<WF> WF, Change<ProofHint> ProofHint)> Changes => changes.Value;
     private static IEnumerable<Change> ChangesFlattener((Change<WF> WF, Change<ProofHint> ProofHint) changePair) { yield return changePair.WF; yield return changePair.ProofHint; }
+    // since `Changes` are constructed once, `NonEmptyChanges` can also be constructed once
+    private static Change<K>? NonEmptyOrNull<K>(Change<K> c) where K : ChangeKind => c.IsEmptyChange ? null : c;
+    private static Lazy<IReadOnlyDictionary<int, (Change<WF>? WF, Change<ProofHint>? ProofHint)>> nonEmptyChanges = new(
+      () => Changes.SelectWhere((c, i) => (!(c.WF.IsEmptyChange && c.ProofHint.IsEmptyChange), (i, (NonEmptyOrNull(c.WF), NonEmptyOrNull(c.ProofHint))))).ToDictionary()
+    );
+    public static IReadOnlyDictionary<int, (Change<WF>? WF, Change<ProofHint>? ProofHint)> NonEmptyChanges => nonEmptyChanges.Value;
     // since `Changes` are constructed once, `ChangesFlattened` can also be constructed once
     private static Lazy<IReadOnlyList<Change>> changesFlattened { get; } = new(() => [.. Changes.SelectMany(ChangesFlattener)]);
     public static IReadOnlyList<Change> ChangesFlattened => changesFlattened.Value;
     // since computing `changedModulesLazy` depends on many aspects that can change from run to run, the lazy instance needs to be reset when said aspects change
-    private static void ResetChangedModulesLazy() {
+    private static void ResetChangedModulesAndMembersLazy() {
       changedModulesLazy = new(() => ChangesFlattened.Where(static c => !c.IsEmptyChange).Select(static c => c.AffectedModuleDecl).ToImmutableHashSet());
+      changedMembersLazy = new(() => ChangesFlattened.Where(static c => !c.IsEmptyChange).OfType<IChangeToMemberDecl>().Select(static c => c.MemberDecl).ToImmutableHashSet());
     }
     private static Lazy<IReadOnlySet<ModuleDecl>> changedModulesLazy { get; set; } = new();
     public static IReadOnlySet<ModuleDecl> ChangedModules => changedModulesLazy.Value;
+    private static Lazy<IReadOnlySet<MemberDecl>> changedMembersLazy { get; set; } = new();
+    public static IReadOnlySet<MemberDecl> ChangedMembers => changedMembersLazy.Value;
 
     private static readonly Expression PlaceholderScope = new SeqDisplayExpr(SourceOrigin.NoToken, []);
     private static readonly Expression PlaceholderId = new LiteralExpr(SourceOrigin.NoToken);
