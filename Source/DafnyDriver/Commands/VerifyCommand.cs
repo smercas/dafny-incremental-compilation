@@ -126,8 +126,8 @@ public static class VerifyCommand {
           curr += 1;
         }
       }
-      async Task<List<string>?> ReadChanges() {
-        List<string> modifications = [];
+      async Task<List<string>?> ReadChanges(List<string> modifications_init) {
+        List<string> modifications = modifications_init;
         while (true) {
           await Write("Enter modification or command (type `:h` for help): ");
           var modification = (await options.Input.ReadLineAsync())!;
@@ -188,6 +188,8 @@ public static class VerifyCommand {
             case ":s":
               options.Set(IncCompCommand.Option, new GenerateSMT2CodeOfChangedVerificationTasks());
               return modifications;
+            case ":r":
+              return [];
             default:
               if (modification.StartsWith(":d i ")) {
                 options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfEntryPoints(modification[":d i ".Length..].Split(' ').ConvertAll(int.Parse)));
@@ -207,8 +209,9 @@ public static class VerifyCommand {
         }
       }
       var originalBoogieFile = options.Get(DeveloperOptionBag.BoogiePrint);
+      List<string> modifications = [];
       while (true) {
-        var modifications = await ReadChanges();
+        modifications = await ReadChanges(modifications);
         if (modifications is null) { break; }
         if (options.Get(IncCompCommand.Option) is PrintAllBoogieCode or PrintBoogieCodeOfModules or PrintBoogieCodeOfChangedVerificationTasks) {
           options.Set(DeveloperOptionBag.BoogiePrint, "-");
