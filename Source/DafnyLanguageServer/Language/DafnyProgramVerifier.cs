@@ -30,6 +30,8 @@ namespace Microsoft.Dafny.LanguageServer.Language {
       ResolutionResult resolution,
       ModuleDefinition moduleDefinition,
       CancellationToken cancellationToken) {
+      var profiler = resolution.ResolvedProgram.Options.Profiler;
+      using var _ = profiler.NewSectionAndWriteResultsAfterwards($"verification task generation for {moduleDefinition.Name}", resolution.ResolvedProgram.Options.OutputWriter.StatusWriter());
 
       if (!BoogieGenerator.ShouldVerifyModule(resolution.ResolvedProgram, moduleDefinition)) {
         throw new Exception("tried to get verification tasks for a module that is not verified");
@@ -44,12 +46,16 @@ namespace Microsoft.Dafny.LanguageServer.Language {
         cancellationToken.ThrowIfCancellationRequested();
 
         var boogieProgram = await DafnyMain.LargeStackFactory.StartNew(() => {
+          using var _ = profiler.NewSection("translation");
           Type.ResetScopes();
           var translatorFlags = new BoogieGenerator.TranslatorFlags(errorReporter.Options) {
             InsertChecksums = 0 < engine.Options.VerifySnapshots,
             ReportRanges = program.Options.Get(Snippets.ShowSnippets)
           };
-          var translator = new BoogieGenerator(errorReporter, resolution.ResolvedProgram.ProofDependencyManager, translatorFlags);
+          BoogieGenerator translator;
+          using (profiler.NewSection("constructor (yes I'm being fr)")) {
+            translator = new BoogieGenerator(errorReporter, resolution.ResolvedProgram.ProofDependencyManager, translatorFlags);
+          }
           return translator.DoTranslation(resolution.ResolvedProgram, moduleDefinition);
         }, cancellationToken);
         var suffix = moduleDefinition.SanitizedName;
@@ -58,12 +64,15 @@ namespace Microsoft.Dafny.LanguageServer.Language {
 
         var justPrintBoogie = program.Options.Get(IncCompCommand.Option) is PrintAllBoogieCode or PrintBoogieCodeOfModules or PrintBoogieCodeOfChangedVerificationTasks;
         if (engine.Options.PrintFile != null) {
+          using var __ = profiler.NewSection("printing");
           var moduleCount = BoogieGenerator.VerifiableModules(program).Count();
           var fileName = moduleCount > 1 ? DafnyMain.BoogieProgramSuffix(engine.Options.PrintFile, suffix) : engine.Options.PrintFile;
           ExecutionEngine.PrintBplFile(engine.Options, justPrintBoogie ? new ExecutionEngine.Forced(fileName) : new ExecutionEngine.Normal(fileName), boogieProgram, false, false, engine.Options.PrettyPrint);
         }
-
-        return justPrintBoogie ? [] : await engine.GetVerificationTasks(boogieProgram, cancellationToken);
+        if (justPrintBoogie) { return []; } else {
+          using var __ = profiler.NewSection("procurement of verification tasks");
+          return await engine.GetVerificationTasks(boogieProgram, cancellationToken);
+        }
       }
       finally {
         mutex.Release();

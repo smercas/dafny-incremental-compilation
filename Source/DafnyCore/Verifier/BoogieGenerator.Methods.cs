@@ -149,6 +149,7 @@ namespace Microsoft.Dafny {
     }
 
     void AddFunction_Top(Function f, bool includeAllMethods) {
+      using var __ = options.Profiler.NewSection($"translating function {f}");
       FuelContext oldFuelContext = this.fuelContext;
       this.fuelContext = FuelSetting.NewFuelContext(f);
       IsAllocContext = new IsAllocContext(options, true);
@@ -156,7 +157,9 @@ namespace Microsoft.Dafny {
       AddClassMember_Function(f);
 
       if (InVerificationScope(f)) {
-        new FunctionWellformednessChecker(this).Check(f);
+        using (options.Profiler.NewSection("WF")) {
+          new FunctionWellformednessChecker(this).Check(f);
+        }
         if (f.OverriddenFunction != null) { //it means that f is overriding its associated parent function
           AddFunctionOverrideCheckImpl(f);
         }
@@ -173,6 +176,7 @@ namespace Microsoft.Dafny {
     }
 
     void AddMethod_Top(MethodOrConstructor m, bool isByMethod, bool includeAllMethods) {
+      using var __ = options.Profiler.NewSection($"translating method {m}");
       if (!includeAllMethods &&
           m.EnclosingClass.EnclosingModuleDefinition != forModule &&
           !referencedMembers.Contains(m)) {
@@ -187,6 +191,7 @@ namespace Microsoft.Dafny {
       if (m.EnclosingClass is IteratorDecl && m == ((IteratorDecl)m.EnclosingClass).Member_MoveNext) {
         // skip the well-formedness check, because it has already been done for the iterator
       } else {
+        using var ___ = options.Profiler.NewSection("WF");
         if (!isByMethod) {
           var proc = AddMethod(m, MethodTranslationKind.SpecWellformedness);
           sink.AddTopLevelDeclaration(proc);

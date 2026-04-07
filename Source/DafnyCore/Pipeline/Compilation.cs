@@ -417,6 +417,7 @@ public class Compilation : IDisposable {
           }
         }
 
+        using var __ = Options.Profiler.NewSectionAndWriteResultsAfterwards($"verification for {canVerify}", Options.OutputWriter.StatusWriter());
         foreach (var task in tasks.Where(taskFilter)) {
 
           var seededTask = randomSeed == null ? task : task.FromSeed(randomSeed.Value);

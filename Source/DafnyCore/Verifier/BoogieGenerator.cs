@@ -466,6 +466,7 @@ namespace Microsoft.Dafny {
 
     PredefinedDecls FindPredefinedDecls(Bpl.Program prog) {
       Contract.Requires(prog != null);
+      using var __ = options.Profiler.NewSection("predefined declarations finder");
       if (prog.Resolve(options) != 0) {
         options.OutputWriter.Exception("resolution errors encountered in Dafny prelude");
         return null;
@@ -714,6 +715,7 @@ namespace Microsoft.Dafny {
     }
 
     Bpl.Program ReadPrelude() {
+      using var __ = options.Profiler.NewSection("prelude");
       string preludePath = options.DafnyPrelude;
       if (preludePath == null) {
         //using (System.IO.Stream stream = Cce.NonNull( System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("DafnyPrelude.bpl")) // Use this once Spec#/VSIP supports designating a non-.resx project item as an embedded resource
@@ -754,17 +756,20 @@ namespace Microsoft.Dafny {
     }
 
     public Bpl.Program DoTranslation(Program p, ModuleDefinition forModule) {
-      if (sink == null) {
-        return new Bpl.Program();
-      }
+      var profiler = p.Options.Profiler;
+      using (profiler.NewSection("plugins")) {
+        if (sink == null) {
+          return new Bpl.Program();
+        }
 
-      if (Options.GetOrOptionDefault(CommonOptionBag.LogLevelOption).CompareTo(LogEventLevel.Verbose) <= 0) {
-        _ = Options.OutputWriter.Status("Starting translation to Boogie of module " + forModule.FullDafnyName);
-      }
+        if (Options.GetOrOptionDefault(CommonOptionBag.LogLevelOption).CompareTo(LogEventLevel.Verbose) <= 0) {
+          _ = Options.OutputWriter.Status("Starting translation to Boogie of module " + forModule.FullDafnyName);
+        }
 
-      foreach (var plugin in p.Options.Plugins) {
-        foreach (var rewriter in plugin.GetRewriters(p.Reporter)) {
-          rewriter.PreVerify(forModule);
+        foreach (var plugin in p.Options.Plugins) {
+          foreach (var rewriter in plugin.GetRewriters(p.Reporter)) {
+            rewriter.PreVerify(forModule);
+          }
         }
       }
 
@@ -776,68 +781,70 @@ namespace Microsoft.Dafny {
       EstablishModuleScope(p.SystemModuleManager.SystemModule, forModule);
       Type.PushScope(this.currentScope);
 
-      foreach (var w in program.SystemModuleManager.Bitwidths) {
-        // type axioms
-        AddBitvectorTypeAxioms(w);
-        // bitwise operations
-        AddBitvectorFunction(w, "and_bv", "bvand");
-        AddBitvectorFunction(w, "or_bv", "bvor");
-        AddBitvectorFunction(w, "xor_bv", "bvxor");  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
-        AddBitvectorFunction(w, "not_bv", "bvnot", false);
-        // arithmetic operations
-        AddBitvectorFunction(w, "add_bv", "bvadd");
-        AddBitvectorFunction(w, "sub_bv", "bvsub");  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
-        AddBitvectorFunction(w, "mul_bv", "bvmul");
-        AddBitvectorFunction(w, "div_bv", "bvudiv");
-        AddBitvectorFunction(w, "mod_bv", "bvurem");
-        // comparisons
-        AddBitvectorFunction(w, "lt_bv", "bvult", true, Bpl.Type.Bool, false);
-        AddBitvectorFunction(w, "le_bv", "bvule", true, Bpl.Type.Bool, true);  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
-        AddBitvectorFunction(w, "ge_bv", "bvuge", true, Bpl.Type.Bool, true);  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
-        AddBitvectorFunction(w, "gt_bv", "bvugt", true, Bpl.Type.Bool, false);  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
-        // shifts
-        AddBitvectorShiftFunction(w, "LeftShift_bv", "bvshl");
-        AddBitvectorShiftFunction(w, "RightShift_bv", "bvlshr");
-        // rotates
-        AddBitvectorShiftFunction(w, "LeftRotate_bv", "ext_rotate_left");
-        AddBitvectorShiftFunction(w, "RightRotate_bv", "ext_rotate_right");
-        // conversion functions
-        AddBitvectorNatConversionFunction(w);
-      }
+      using (profiler.NewSection("system module")) {
+        foreach (var w in program.SystemModuleManager.Bitwidths) {
+          // type axioms
+          AddBitvectorTypeAxioms(w);
+          // bitwise operations
+          AddBitvectorFunction(w, "and_bv", "bvand");
+          AddBitvectorFunction(w, "or_bv", "bvor");
+          AddBitvectorFunction(w, "xor_bv", "bvxor");  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
+          AddBitvectorFunction(w, "not_bv", "bvnot", false);
+          // arithmetic operations
+          AddBitvectorFunction(w, "add_bv", "bvadd");
+          AddBitvectorFunction(w, "sub_bv", "bvsub");  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
+          AddBitvectorFunction(w, "mul_bv", "bvmul");
+          AddBitvectorFunction(w, "div_bv", "bvudiv");
+          AddBitvectorFunction(w, "mod_bv", "bvurem");
+          // comparisons
+          AddBitvectorFunction(w, "lt_bv", "bvult", true, Bpl.Type.Bool, false);
+          AddBitvectorFunction(w, "le_bv", "bvule", true, Bpl.Type.Bool, true);  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
+          AddBitvectorFunction(w, "ge_bv", "bvuge", true, Bpl.Type.Bool, true);  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
+          AddBitvectorFunction(w, "gt_bv", "bvugt", true, Bpl.Type.Bool, false);  // Z3 supports this, but it seems not to be in the SMT-LIB 2 standard
+                                                                                  // shifts
+          AddBitvectorShiftFunction(w, "LeftShift_bv", "bvshl");
+          AddBitvectorShiftFunction(w, "RightShift_bv", "bvlshr");
+          // rotates
+          AddBitvectorShiftFunction(w, "LeftRotate_bv", "ext_rotate_left");
+          AddBitvectorShiftFunction(w, "RightRotate_bv", "ext_rotate_right");
+          // conversion functions
+          AddBitvectorNatConversionFunction(w);
+        }
 
-      if (program.SystemModuleManager.FloatWidths.Contains(64)) {
-        AddFp64Functions();
-      }
+        if (program.SystemModuleManager.FloatWidths.Contains(64)) {
+          AddFp64Functions();
+        }
 
-      foreach (TopLevelDecl d in program.SystemModuleManager.SystemModule.TopLevelDecls) {
-        CurrentDeclaration = d;
-        if (d is AbstractTypeDecl abstractType) {
-          GetOrCreateTypeConstructor(abstractType);
-          AddClassMembers(abstractType, true, true);
-        } else if (d is NewtypeDecl) {
-          var dd = (NewtypeDecl)d;
-          AddTypeDecl(dd);
-          AddClassMembers(dd, true, true);
-        } else if (d is SubsetTypeDecl) {
-          AddTypeDecl((SubsetTypeDecl)d);
-        } else if (d is TypeSynonymDecl) {
-          // do nothing, just bypass type synonyms in the translation
-        } else if (d is DatatypeDecl) {
-          var dd = (DatatypeDecl)d;
-          AddDatatype(dd);
-          AddClassMembers(dd, true, true);
-        } else if (d is ArrowTypeDecl) {
-          var ad = (ArrowTypeDecl)d;
-          GetClassTyCon(ad);
-          AddArrowTypeAxioms(ad);
-        } else if (d is ClassLikeDecl) {
-          var cl = (ClassLikeDecl)d;
-          AddClassMembers(cl, true, true);
-          if (cl.NonNullTypeDecl != null) {
-            AddTypeDecl(cl.NonNullTypeDecl);
+        foreach (TopLevelDecl d in program.SystemModuleManager.SystemModule.TopLevelDecls) {
+          CurrentDeclaration = d;
+          if (d is AbstractTypeDecl abstractType) {
+            GetOrCreateTypeConstructor(abstractType);
+            AddClassMembers(abstractType, true, true);
+          } else if (d is NewtypeDecl) {
+            var dd = (NewtypeDecl)d;
+            AddTypeDecl(dd);
+            AddClassMembers(dd, true, true);
+          } else if (d is SubsetTypeDecl) {
+            AddTypeDecl((SubsetTypeDecl)d);
+          } else if (d is TypeSynonymDecl) {
+            // do nothing, just bypass type synonyms in the translation
+          } else if (d is DatatypeDecl) {
+            var dd = (DatatypeDecl)d;
+            AddDatatype(dd);
+            AddClassMembers(dd, true, true);
+          } else if (d is ArrowTypeDecl) {
+            var ad = (ArrowTypeDecl)d;
+            GetClassTyCon(ad);
+            AddArrowTypeAxioms(ad);
+          } else if (d is ClassLikeDecl) {
+            var cl = (ClassLikeDecl)d;
+            AddClassMembers(cl, true, true);
+            if (cl.NonNullTypeDecl != null) {
+              AddTypeDecl(cl.NonNullTypeDecl);
+            }
+          } else {
+            Contract.Assert(d is ValuetypeDecl);
           }
-        } else {
-          Contract.Assert(d is ValuetypeDecl);
         }
       }
 
@@ -848,9 +855,12 @@ namespace Microsoft.Dafny {
       mods.Remove(forModule);
       mods.Insert(0, forModule);
 
-      var visibleTopLevelDecls =
-        mods.SelectMany(m => m.TopLevelDecls.Where(VisibleInScope)).ToList();
+      List<TopLevelDecl> visibleTopLevelDecls;
+      using (profiler.NewSection("computing the visible top level decls")) {
+        visibleTopLevelDecls =
+          mods.SelectMany(m => m.TopLevelDecls.Where(VisibleInScope)).ToList();
 
+      }
       foreach (var d in visibleTopLevelDecls) {
         if (d is TopLevelDeclWithMembers memberContainer) {
           foreach (var member in memberContainer.Members) {
@@ -861,16 +871,18 @@ namespace Microsoft.Dafny {
         }
       }
 
-      foreach (TopLevelDecl d in visibleTopLevelDecls) {
-        CurrentDeclaration = d;
-        if (d is AbstractTypeDecl abstractType) {
-          AddClassMembers(abstractType, true, true);
-        } else if (d is ModuleDecl) {
-          // submodules have already been added as a top level module, ignore this.
-        } else if (d is RevealableTypeDecl revealableTypeDecl) {
-          AddRevealableTypeDecl(revealableTypeDecl);
-        } else {
-          Contract.Assert(false);
+      using (profiler.NewSection("translating the visible top level decls")) {
+        foreach (TopLevelDecl d in visibleTopLevelDecls) {
+          CurrentDeclaration = d;
+          if (d is AbstractTypeDecl abstractType) {
+            AddClassMembers(abstractType, true, true);
+          } else if (d is ModuleDecl) {
+            // submodules have already been added as a top level module, ignore this.
+          } else if (d is RevealableTypeDecl revealableTypeDecl) {
+            AddRevealableTypeDecl(revealableTypeDecl);
+          } else {
+            Contract.Assert(false);
+          }
         }
       }
 
