@@ -76,6 +76,8 @@ public static class VerifyCommand {
     }
     options.Set(CachingType, CachingMode.Incremental);
     options.Set(IncCompCommand.Option, new GenerateAllSMT2Code());
+    options.Profiler = new ExecutionEngineOptions.ActualProfiler();
+
     var compilation = CliCompilation.Create(options);
     compilation.Start();
 
