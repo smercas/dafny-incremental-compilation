@@ -182,10 +182,10 @@ public static class VerifyCommand {
             case ":b":
               options.Set(IncCompCommand.Option, new PrintBoogieCodeOfChangedVerificationTasks());
               return modifications;
-            case ":as" or "":
+            case ":as":
               options.Set(IncCompCommand.Option, new GenerateAllSMT2Code());
               return modifications;
-            case ":s":
+            case ":s" or "":
               options.Set(IncCompCommand.Option, new GenerateSMT2CodeOfChangedVerificationTasks());
               return modifications;
             case ":r":
@@ -209,7 +209,7 @@ public static class VerifyCommand {
         }
       }
       var originalBoogieFile = options.Get(DeveloperOptionBag.BoogiePrint);
-      List<string> modifications = [];
+      List<string>? modifications = [];
       while (true) {
         modifications = await ReadChanges(modifications);
         if (modifications is null) { break; }
