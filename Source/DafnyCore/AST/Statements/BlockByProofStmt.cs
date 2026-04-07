@@ -76,5 +76,8 @@ public class BlockByProofStmt : Statement, ICanResolveNewAndOld, ICanPrint,
     Proof = original.Proof.WithProtections(protector);
     Body = original.Body.WithProtections(protector);
   }
-  public override BlockByProofStmt WithProtections(Protector protector) => new(protector, this);
+  public override BlockByProofStmt WithProtections(Protector protector) => (Body is AssertStmt) switch {
+    true => protector.WithAttributeAdditionalContext(() => new BlockByProofStmt(protector, this)),
+    false => new(protector, this),
+  };
 }
