@@ -31,6 +31,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
   public abstract ResolutionCache Cache { get; protected set; }
   protected virtual void onError() { }
   public override Task Resolve(CancellationToken cancellationToken) {
+    using var __ = Options.Profiler.NewSectionAndWriteResultsAfterwards("resolution", Options.OutputWriter.StatusWriter());
     Type.ResetScopes();
 
     Type.EnableScopes();
@@ -115,8 +116,15 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
     Cache.ModuleDeclResolutionResults[decl] = moduleResolutionResult;
     base.ProcessDeclarationResolutionResult(moduleDeclarationPointers, decl, moduleResolutionResult);
   }
-  protected ModuleResolutionResult ResolveModuleDeclaration(ModuleDecl curr) => ResolveModuleDeclaration(Program.Compilation, curr);
-  protected ModuleResolutionResult ResolveModuleDeclaration(ModuleDecl curr, ModuleDecl prev) => new ModuleResolver(this, curr.Options).ResolveModuleDeclaration(Program.Compilation, curr/*, prev*/);
+  protected ModuleResolutionResult ResolveModuleDeclaration(ModuleDecl curr) {
+    using var _ = Options.Profiler.NewSection(curr.Name);
+    return ResolveModuleDeclaration(Program.Compilation, curr);
+  }
+
+  protected ModuleResolutionResult ResolveModuleDeclaration(ModuleDecl curr, ModuleDecl prev) {
+    using var _ = Options.Profiler.NewSection(curr.Name);
+    return new ModuleResolver(this, curr.Options).ResolveModuleDeclaration(Program.Compilation, curr/*, prev*/);
+  }
 }
 
 // a lot of copy paste from the original ProgramResolver, will be fixed later
