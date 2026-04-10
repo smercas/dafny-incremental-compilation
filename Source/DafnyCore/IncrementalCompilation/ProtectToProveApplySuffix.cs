@@ -67,7 +67,7 @@ namespace DafnyCore.IncrementalCompilation {
     }
     private static Dictionary<ProtectToProveApplySuffix, ChangeContext> ChangeContexts { get; set; } = [];
     // these change objects can be computed once and updated with relevant information
-    private static Lazy<List<(Change<WF>, Change<ProofHint>)>> changes { get; set; } = new(() => [.. Instances.Select(i => ChangeContexts[i].Evaluated).Select(cc => (
+    private static Lazy<List<(Change<WF>, Change<ProofHint>)>> changesLazy { get; } = new(() => [.. Instances.Select(i => ChangeContexts[i].Evaluated).Select(cc => (
       cc.AttributeBearingDeclarations switch {
         [AssertStmt assertStmt, ..] => new AssertWFChange(cc.MemberDecl, assertStmt) as Change<WF>,
         [AttributedExpression attributedExpression, ..] => new EnsuresWFChange(cc.MemberDecl, attributedExpression),
@@ -94,14 +94,8 @@ namespace DafnyCore.IncrementalCompilation {
       }
     }
     public const int ChangeTypesCount = 2;
-    public static IReadOnlyList<(Change<WF> WF, Change<ProofHint> ProofHint)> Changes => changes.Value;
+    public static IReadOnlyList<(Change<WF> WF, Change<ProofHint> ProofHint)> Changes => changesLazy.Value;
     private static IEnumerable<Change> ChangesFlattener((Change<WF> WF, Change<ProofHint> ProofHint) changePair) { yield return changePair.WF; yield return changePair.ProofHint; }
-    // since `Changes` are constructed once, `NonEmptyChanges` can also be constructed once
-    private static Change<K>? NonEmptyOrNull<K>(Change<K> c) where K : ChangeKind => c.IsEmptyChange ? null : c;
-    private static Lazy<IReadOnlyDictionary<int, (Change<WF>? WF, Change<ProofHint>? ProofHint)>> nonEmptyChanges = new(
-      () => Changes.SelectWhere((c, i) => (!(c.WF.IsEmptyChange && c.ProofHint.IsEmptyChange), (i, (NonEmptyOrNull(c.WF), NonEmptyOrNull(c.ProofHint))))).ToDictionary()
-    );
-    public static IReadOnlyDictionary<int, (Change<WF>? WF, Change<ProofHint>? ProofHint)> NonEmptyChanges => nonEmptyChanges.Value;
     // since `Changes` are constructed once, `ChangesFlattened` can also be constructed once
     private static Lazy<IReadOnlyList<Change>> changesFlattened { get; } = new(() => [.. Changes.SelectMany(ChangesFlattener)]);
     public static IReadOnlyList<Change> ChangesFlattened => changesFlattened.Value;
