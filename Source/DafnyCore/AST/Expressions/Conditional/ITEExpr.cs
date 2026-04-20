@@ -127,7 +127,7 @@ public class ITEExpr : Expression, ICanFormat, ICloneable<ITEExpr> {
     IsBindingGuard = original.IsBindingGuard;
     Test = (original.IsBindingGuard, original.Test) switch {
       (false, _) => original.Test.WithProtections(protector),
-      (true, ExistsExpr { Range: null } test) => test.WithProtections(protector, ComprehensionExpr.Options.Empty),
+      (true, ExistsExpr { Range: null } test) => test.WithProtections(protector, ComprehensionExpr.Options.DontAddProtections),
       _ => throw new UnreachableException(),
     };
     Thn = original.Thn.WithProtections(protector); // if `IsBindingGuard` is true then `Thn` is a `LetExpr` and already protects the bindings

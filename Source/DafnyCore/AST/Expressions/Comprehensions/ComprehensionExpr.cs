@@ -120,21 +120,20 @@ public abstract partial class ComprehensionExpr : Expression, IAttributeBearingD
     return true;
   }
 
-  [Flags]
   public enum Options {
-    Empty = 0,
-    ProtectBoundVarsInTerm = 1 << 0,
-    Default = ProtectBoundVarsInTerm,
+    DontAddProtections,
+    AddProtectionOnBoundVarsInRange,
+    Default = AddProtectionOnBoundVarsInRange,
   };
 
   protected ComprehensionExpr(Protector protector, ComprehensionExpr original, Options options) : base(protector, original) {
     BoundVars = original.BoundVars.ConvertAll(bv => bv.WithProtections(protector));
     Range = original.Range?.WithProtections(protector);
+    if (options == Options.AddProtectionOnBoundVarsInRange) {
+      Range = Range?.WithPrependedExpressionsIfAny(original.BoundVars.Select(bv => bv.Name.WrappedWith(ProtectorFunctions.NewProtect)));
+    }
     Attributes = protector.Clone(original.Attributes);
     Term = original.Term.WithProtections(protector);
-    if (options.HasFlag(Options.ProtectBoundVarsInTerm)) {
-      Term = Term.WithPrependedAssertionsIfAny(original.BoundVars.Select(bv => bv.ToProtectAssertion()));
-    }
   }
   public override ComprehensionExpr WithProtections(Protector protector) => WithProtections(protector, Options.Default);
   public abstract ComprehensionExpr WithProtections(Protector protector, Options options);

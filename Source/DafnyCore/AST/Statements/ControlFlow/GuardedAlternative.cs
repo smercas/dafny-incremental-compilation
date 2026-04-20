@@ -52,7 +52,7 @@ public class GuardedAlternative : NodeWithOrigin, IAttributeBearingDeclaration, 
         original.Body.WithProtections(protector).ToList()
       ),
       (true, ExistsExpr { Range: null } guard) => (
-        guard.WithProtections(protector, ComprehensionExpr.Options.Empty),
+        guard.WithProtections(protector, ComprehensionExpr.Options.DontAddProtections),
         [.. guard.BoundVars.Select(bv => bv.ToProtectAssertion()), .. original.Body.WithProtections(protector)]
       ),
       _ => throw new UnreachableException(),

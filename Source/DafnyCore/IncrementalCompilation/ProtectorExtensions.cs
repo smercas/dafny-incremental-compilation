@@ -60,5 +60,18 @@ namespace DafnyCore.IncrementalCompilation {
       return ss.Reverse().Aggregate(e, (prev, s) => new StmtExpr(prev.Origin, s, prev));
     }
 
+    public static BinaryExpr WithPrependedExpressions(this Expression e, Expression first, params Expression[] secondUntilLast) => e.WithPrependedExpressions([first, .. secondUntilLast]);
+    // enumerable must have at least one element
+    public static BinaryExpr WithPrependedExpressions(this Expression e, IEnumerable<Expression> ss) {
+      Contract.Requires(ss.Any());
+      return ss.Reverse().AggregateAs(e, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev)); // IPMTODO: check if this is ok
+    }
+    // Weaker version of `WithPrependedExpressions` that doesn't guarantee that the result is a `BinaryExpr`, but can accept being passed no elements
+    public static Expression WithPrependedExpressionsIfAny(this Expression e, params Expression[] ss) => e.WithPrependedExpressionsIfAny(ss as IEnumerable<Expression>);
+    // Weaker version of `WithPrependedExpressions` that doesn't guarantee that the result is a `BinaryExpr`, but can accept an empty enumerable
+    public static Expression WithPrependedExpressionsIfAny(this Expression e, IEnumerable<Expression> ss) {
+      Contract.Ensures(!ss.Any() || Contract.Result<Expression>() is StmtExpr);
+      return ss.Reverse().Aggregate(e, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev));
+    }
   }
 }

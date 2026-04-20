@@ -153,7 +153,7 @@ public class IfStmt : LabeledStatement, ICloneable<IfStmt>, ICanFormat {
         original.Thn.WithProtections(protector)
       ),
       (true, ExistsExpr { Range: null } guard) => (
-        guard.WithProtections(protector, ComprehensionExpr.Options.Empty),
+        guard.WithProtections(protector, ComprehensionExpr.Options.DontAddProtections),
         original.Thn.WithProtections(protector, guard.BoundVars.Select(bv => bv.ToProtectAssertion()))
       ),
       _ => throw new UnreachableException(),
