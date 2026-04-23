@@ -113,7 +113,7 @@ namespace DafnyCore.IncrementalCompilation {
     private static readonly Expression PlaceholderId = new LiteralExpr(SourceOrigin.NoToken);
 
     public ProtectToProveApplySuffix(Cloner cloner, ProtectToProveApplySuffix original) : base(cloner, original) {
-      throw new UnreachableException("not sure if it can be reached, I sincerely hope it can't");
+      throw new InvalidOperationException("`ProtectToProveApplySuffix` logic does not allow for cloning");
     }
     public new ProtectToProveApplySuffix Clone(Cloner cloner) => new(cloner, this);
 

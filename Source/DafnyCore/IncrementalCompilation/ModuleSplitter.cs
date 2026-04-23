@@ -76,14 +76,15 @@ namespace DafnyCore.IncrementalCompilation {
         protected LiteralModuleDecl OriginalModuleDecl => OriginalModuleDef.EnclosingLiteralModuleDecl!;
         private LiteralModuleDecl CreateModule(DafnyOptions dafnyOptions, ModuleDefinition enclosingModule) {
           var trace = Trace(EnclosingDecl);
-          var refinement_target_parts = trace.Select(d => d.Name);
-          if (EnclosingDecl is not DefaultClassDecl) { refinement_target_parts = refinement_target_parts.Append(EnclosingDecl.Name); }
+          var refinementTargetParts = trace.Select(d => d.Name);
+          IEnumerable<string> enclosingDeclName = [];
+          if (EnclosingDecl is not DefaultClassDecl) { enclosingDeclName = [ EnclosingDecl.Name ]; }
           var def = new ModuleDefinition(
             MemberDecl.Origin,
-            $"{string.Join("_", refinement_target_parts)}_{MemberDecl.Name}".ToNameNodeWithVirtualToken(),
+            $"{string.Join("_", [.. refinementTargetParts, .. enclosingDeclName])}_{MemberDecl.Name}".ToNameNodeWithVirtualToken(),
             [],
             ModuleKindEnum.Abstract,
-            new(ImplementationKind.Refinement, new([.. refinement_target_parts.Select(Microsoft.Dafny.Util.ToNameNodeWithVirtualToken)])),
+            new(ImplementationKind.Refinement, new([.. refinementTargetParts.Select(Microsoft.Dafny.Util.ToNameNodeWithVirtualToken)])),
             enclosingModule,
             null,
             []
@@ -92,33 +93,52 @@ namespace DafnyCore.IncrementalCompilation {
           return decl;
         }
         protected abstract void AlterOriginalMemberDecl();
-        protected abstract M CreateDuplicateOfOriginalMemberDecl(TopLevelDecl enclosingClass);
+        protected abstract M CreateDuplicateOfOriginalMemberDecl();
         public override TopLevelDecl Process(DafnyOptions dafnyOptions, DefaultModuleDefinition root) {
           var new_decl = CreateModule(dafnyOptions, root);
+          var new_member = CreateDuplicateOfOriginalMemberDecl();
+          new_member.NameNode = $"{Constants.Name}_{new_member.NameNode}".ToNameNodeWithVirtualToken();
           switch (EnclosingDecl) {
-            case DefaultClassDecl:
-              var new_member = CreateDuplicateOfOriginalMemberDecl(new_decl.ModuleDef.DefaultClass!);
-              new_member.NameNode = $"{Constants.Name}_{new_member.NameNode}".ToNameNodeWithVirtualToken();
+            case DefaultClassDecl: {
+              new_member.EnclosingClass = new_decl.ModuleDef.DefaultClass!;
               new_decl.ModuleDef.DefaultClass!.Members.Add(new_member);
               AlterOriginalMemberDecl();
               new_decl.ModuleDef.DefaultClass!.SetMembersBeforeResolution();
-              break;
+            } break;
+            case ClassDecl or TraitDecl or DatatypeDecl or NewtypeDecl or AbstractTypeDecl: {
+              TopLevelDecl new_enclosing_class = EnclosingDecl switch {
+                ClassDecl => new ClassDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), null, [.. EnclosingDecl.TypeArgs], new_decl.ModuleDef, [new_member], [], true),
+                TraitDecl => new TraitDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [new_member], null, true, []),
+                DatatypeDecl => EnclosingDecl switch {
+                  CoDatatypeDecl => new CoDatatypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [], [], [new_member], null, true),
+                  IndDatatypeDecl indDatatypeDecl => indDatatypeDecl switch {
+                    TupleTypeDecl => throw new UnreachableException("`TupleTypeDecl` should only be present in the `System` module"),
+                    _ when indDatatypeDecl.IsExactly() => new IndDatatypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [], [], [new_member], null, true),
+                    _ => throw new UnreachableException(),
+                  },
+                  _ => throw new UnreachableException(),
+                },
+                NewtypeDecl => new NewtypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), [.. EnclosingDecl.TypeArgs], new_decl.ModuleDef, null, SubsetTypeDecl.WKind.CompiledZero, null, [], [new_member], null, true),
+                AbstractTypeDecl { Characteristics: var characteristics } => new AbstractTypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, new TypeParameterCharacteristics(characteristics.EqualitySupport, characteristics.AutoInit, characteristics.ContainsNoReferenceTypes) { SourceOrigin = characteristics.SourceOrigin }, [.. EnclosingDecl.TypeArgs], [], [new_member], null, true),
+                _ => throw new UnreachableException(),
+              };
+              new_member.EnclosingClass = new_enclosing_class;
+              new_decl.ModuleDef.SourceDecls.Add(new_enclosing_class);
+              AlterOriginalMemberDecl();
+            } break;
+
           }
           return new_decl;
         }
       }
       public class FromConstantField<E>(E enclosingDecl, ConstantField constantField) : FromMemberDecl<E, ConstantField>(enclosingDecl, constantField) where E : TopLevelDeclWithMembers {
-        protected override ConstantField CreateDuplicateOfOriginalMemberDecl(TopLevelDecl enclosingClass) => throw new NotImplementedException();
+        protected override ConstantField CreateDuplicateOfOriginalMemberDecl() => throw new NotImplementedException();
         protected override void AlterOriginalMemberDecl() => throw new NotImplementedException();
       }
       public class FromMethodOrFunction<E>(E enclosingDecl, MethodOrFunction methodOrFunction, IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> attrInContract, IReadOnlySet<AttributesAccessor> attrInBody) : FromMemberDecl<E, MethodOrFunction>(enclosingDecl, methodOrFunction) where E : TopLevelDeclWithMembers {
         private IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> AttrInContract { get; } = attrInContract;
         private IReadOnlySet<AttributesAccessor> AttrInBody { get; } = attrInBody;
-        protected override MethodOrFunction CreateDuplicateOfOriginalMemberDecl(TopLevelDecl enclosingClass) {
-          var r = MemberDecl.WithProtections(new());
-          r.EnclosingClass = enclosingClass;
-          return r;
-        }
+        protected override MethodOrFunction CreateDuplicateOfOriginalMemberDecl() => MemberDecl.WithProtections(new());
 
         protected override void AlterOriginalMemberDecl() {
           foreach (var acc in Microsoft.Dafny.Util.Concat(AttrInContract.Values.SelectMany(v => v), AttrInBody)) {
@@ -171,7 +191,7 @@ namespace DafnyCore.IncrementalCompilation {
           case IteratorDecl id:
             foreach (var e in Split(id)) { yield return e; }
             break;
-          case TopLevelDeclWithMembers wm when wm is (ClassDecl or TraitDecl or DatatypeDecl or NewtypeDecl or AbstractTypeDecl):
+          case TopLevelDeclWithMembers wm when wm is ClassDecl or TraitDecl or DatatypeDecl or NewtypeDecl or AbstractTypeDecl:
             foreach (var e in Split(wm)) { yield return e; }
             break;
           case SubsetTypeDecl tsd:
@@ -209,7 +229,6 @@ namespace DafnyCore.IncrementalCompilation {
       public bool IsInherited(ModuleDefinition m) => o.IsInherited(m);
     }
     private static IEnumerable<RefiningModuleGenerator> Split<E>(E dcd) where E : TopLevelDeclWithMembers {
-      bool canHaveConstructors = dcd is ClassDecl or TraitDecl;
       foreach (var member in dcd.Members) {
         switch (member) {
           case ConstantField { Rhs: var e and not null, Attributes: var attrs } cf when HasAttr(attrs, Constants.AttributeName) || ContainingAttr(e, Constants.AttributeName).Any():
