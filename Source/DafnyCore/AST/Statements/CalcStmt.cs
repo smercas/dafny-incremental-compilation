@@ -454,14 +454,14 @@ public class CalcStmt : Statement, ICloneable<CalcStmt>, ICanFormat {
   }
 
   protected CalcStmt(Protector protector, CalcStmt original) : base(protector, original) {
-    UserSuppliedOp = original.UserSuppliedOp.WithProtections(protector);
+    UserSuppliedOp = original.UserSuppliedOp?.WithProtections(protector);
     Lines = original.Lines switch {
     [.. IEnumerable<Expression> withoutLast2, var secondToLast, var last]
         when secondToLast == last && secondToLast.WithProtections(protector) is var lastToAdd =>
       [.. withoutLast2.Select(l => l.WithProtections(protector)), lastToAdd, lastToAdd],
       _ => original.Lines.ConvertAll(l => l.WithProtections(protector)),
     };
-    StepOps = original.StepOps.ConvertAll(o => o.WithProtections(protector));
+    StepOps = original.StepOps.ConvertAll(o => o?.WithProtections(protector));
     Hints = original.Hints.ConvertAll(h => h.WithProtections(protector));
     Steps = [];
   }
