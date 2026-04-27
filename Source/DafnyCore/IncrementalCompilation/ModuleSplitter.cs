@@ -35,6 +35,7 @@ namespace DafnyCore.IncrementalCompilation {
 
           sd.EnclosingModuleDefinition = def;
           if (sd is LiteralModuleDecl lmd) { lmd.ModuleDef.EnclosingModule = def; }
+          if (sd is ClassDecl { NonNullTypeDecl: var classDeclNonNullTypeDecl and not null } ) { classDeclNonNullTypeDecl.EnclosingModuleDefinition = def; }
         }
         return decl;
       }
