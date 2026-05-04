@@ -1,4 +1,5 @@
-﻿using Microsoft.Dafny;
+﻿using Microsoft.Boogie;
+using Microsoft.Dafny;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -64,14 +65,20 @@ namespace DafnyCore.IncrementalCompilation {
     // enumerable must have at least one element
     public static BinaryExpr WithPrependedExpressions(this Expression e, IEnumerable<Expression> ss) {
       Contract.Requires(ss.Any());
-      return ss.Reverse().AggregateAs(e, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev)); // IPMTODO: check if this is ok
+      return ss.Reverse().AggregateAs(e.WrapWithParensIfNecessary() as Expression, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev)); // IPMTODO: check if this is ok
     }
     // Weaker version of `WithPrependedExpressions` that doesn't guarantee that the result is a `BinaryExpr`, but can accept being passed no elements
     public static Expression WithPrependedExpressionsIfAny(this Expression e, params Expression[] ss) => e.WithPrependedExpressionsIfAny(ss as IEnumerable<Expression>);
     // Weaker version of `WithPrependedExpressions` that doesn't guarantee that the result is a `BinaryExpr`, but can accept an empty enumerable
     public static Expression WithPrependedExpressionsIfAny(this Expression e, IEnumerable<Expression> ss) {
       Contract.Ensures(!ss.Any() || Contract.Result<Expression>() is StmtExpr);
-      return ss.Reverse().Aggregate(e, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev));
+      var l = ss.ToList();
+      if (l.Count == 0) { return e; }
+      return l.Reversed().Aggregate(e.WrapWithParensIfNecessary() as Expression, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev)); // IPMTODO: check if it's ok to make a ParensExpression here if the enumerable is empty
     }
+    private static ParensExpression WrapWithParensIfNecessary(this Expression e) => e switch {
+      ParensExpression pe => pe,
+      _ => new ParensExpression(e.Origin, e),
+    };
   }
 }
