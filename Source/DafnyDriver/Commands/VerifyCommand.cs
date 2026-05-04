@@ -70,6 +70,7 @@ public static class VerifyCommand {
 
   
   public static async Task<int> HandleVerification(DafnyOptions options) {
+    options.EmitDebugInformation = true;
     options.NormalizeNames = false;
     if (options.Get(CommonOptionBag.VerificationCoverageReport) != null) {
       options.TrackVerificationCoverage = true;
@@ -128,8 +129,7 @@ public static class VerifyCommand {
           curr += 1;
         }
       }
-      async Task<List<string>?> ReadChanges(List<string> modifications_init) {
-        List<string> modifications = modifications_init;
+      async Task<List<string>?> ReadChanges(List<string> modifications) {
         while (true) {
           await Write("Enter modification or command (type `:h` for help): ");
           var modification = (await options.Input.ReadLineAsync())!;
@@ -169,6 +169,7 @@ public static class VerifyCommand {
                 "  :as                Generate all SMT2 files.",
                 "  :s                 (DEFAULT) Generate only the SMT2 files that need",
                 "                   regeneration based on the provided modifications.",
+                "  :r                 Reset Changes from previous input",
                 ""
               );
               break;
@@ -191,7 +192,8 @@ public static class VerifyCommand {
               options.Set(IncCompCommand.Option, new GenerateSMT2CodeOfChangedVerificationTasks());
               return modifications;
             case ":r":
-              return [];
+              modifications.Clear();
+              break;
             default:
               if (modification.StartsWith(":d i ")) {
                 options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfEntryPoints(modification[":d i ".Length..].Split(' ').ConvertAll(int.Parse)));
