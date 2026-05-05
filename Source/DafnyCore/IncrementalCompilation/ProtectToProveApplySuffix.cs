@@ -12,7 +12,45 @@ using System.Threading.Tasks;
 using static Microsoft.Dafny.Change;
 
 namespace DafnyCore.IncrementalCompilation {
-  public class ProtectToProveApplySuffix : ApplySuffix, ICloneable<ProtectToProveApplySuffix> {
+  public abstract class BaseProtectToProveApplySuffix : ApplySuffix, ICloneable<BaseProtectToProveApplySuffix> {
+
+    protected static readonly Expression PlaceholderScope = new SeqDisplayExpr(SourceOrigin.NoToken, []);
+    protected static readonly Expression PlaceholderId = new LiteralExpr(SourceOrigin.NoToken);
+
+    public new BaseProtectToProveApplySuffix Clone(Cloner cloner) => throw new InvalidOperationException("`ProtectToProveApplySuffix` logic does not allow for cloning");
+
+    protected BaseProtectToProveApplySuffix(Expression e, Protector protector, BigInteger? id = null) : base(e.Origin, null, ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
+        new(null, e.WithProtections(protector)),
+      new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
+      new(null, PlaceholderScope),
+      new(null, id is not null ? new LiteralExpr(SourceOrigin.NoToken, id) : PlaceholderId),
+    ], Token.NoToken
+    ) {
+      Contract.Ensures(IsValidPreResolve);
+    }
+    public bool IsValidPreResolve => Bindings.ArgumentBindings is [_, _, { Actual: SeqDisplayExpr { Elements: [] } }, _];
+    internal void AddScopeArgs(INewOrOldResolver resolver, ResolutionContext context) {
+      Contract.Requires(IsValidPreResolve);
+      //static List<T?> getThingsFromScope<T>(Scope<T> s) where T : class =>
+      //    (s.GetType()
+      //      .GetField("things", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+      //      .GetValue(s) as List<T?>)!;
+      //Seq.Elements.AddRange(getThingsFromScope(resolver.Scope).IgnoreNulls().Distinct().Select(v => {
+      //  var e = VariableNameWrappedIn_ProtectScope_Call(v.Name);
+      //  var ns = (e.Bindings.ArgumentBindings.First(b => b.Actual is NameSegment _ns && _ns.Name == v.Name).Actual as NameSegment)!;
+
+      //  var id = new IdentifierExpr(SourceOrigin.NoToken, v);
+      //  ns.ResolvedExpression = id;
+      //  ns.Type = id.Type.UseInternalSynonym();
+      //  return e;
+      //}));
+      Bindings.ArgumentBindings.First(ab => ReferenceEquals(ab.Actual, PlaceholderScope)).Actual = new SeqDisplayExpr(SourceOrigin.NoToken, [.. resolver.ScopeArgsFrom(context)]);
+      //System.Console.WriteLine('[' + string.Join(", ", Seq.Elements) + ']');
+    }
+
+    public override BaseProtectToProveApplySuffix WithProtections(Protector protector) => throw new UnreachableException($"Due to the nature of the protection applied over the AST, no part of the AST should be processed more than once; this expression signals that a part of the AST ({this}) is to be processed at least twice");
+  }
+  public class ProtectToProveApplySuffix : BaseProtectToProveApplySuffix {
     public static Comparer<ProtectToProveApplySuffix> Comparer { get; } = Comparer<ProtectToProveApplySuffix>.Create((l, r) => {
       int cmp = string.Compare(l.Origin.Uri.AbsoluteUri, r.Origin.Uri.AbsoluteUri);
       if (cmp != 0) { return cmp; }
@@ -108,55 +146,10 @@ namespace DafnyCore.IncrementalCompilation {
     public static IReadOnlySet<ModuleDecl> ChangedModules => changedModulesLazy.Value;
     private static Lazy<IReadOnlySet<MemberDecl>> changedMembersLazy { get; set; } = new();
     public static IReadOnlySet<MemberDecl> ChangedMembers => changedMembersLazy.Value;
-
-    private static readonly Expression PlaceholderScope = new SeqDisplayExpr(SourceOrigin.NoToken, []);
-    private static readonly Expression PlaceholderId = new LiteralExpr(SourceOrigin.NoToken);
-
-    public ProtectToProveApplySuffix(Cloner cloner, ProtectToProveApplySuffix original) : base(cloner, original) {
-      throw new InvalidOperationException("`ProtectToProveApplySuffix` logic does not allow for cloning");
-    }
-    public new ProtectToProveApplySuffix Clone(Cloner cloner) => new(cloner, this);
-
-    public ProtectToProveApplySuffix(Expression e, Protector protector, ChangeContext changeContext) : base(e.Origin, null, ProtectorFunctions.ProtectToProve.ToExprDotName(), [
-        new(null, e.WithProtections(protector)),
-      new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
-      new(null, PlaceholderScope),
-      new(null, PlaceholderId),
-    ], Token.NoToken
-    ) {
-      Contract.Ensures(IsValidPreResolve);
+    public ProtectToProveApplySuffix(Expression e, Protector protector, ChangeContext changeContext) : base(e, protector) {
       instances.Add(this);
       ChangeContexts[this] = changeContext;
     }
-    public ProtectToProveApplySuffix(Expression e, Protector protector, BigInteger immediateOrder) : base(e.Origin, null, ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
-        new(null, e.WithProtections(protector)),
-      new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
-      new(null, PlaceholderScope),
-      new(null, new LiteralExpr(SourceOrigin.NoToken, immediateOrder)),
-    ], Token.NoToken
-    ) {
-      Contract.Ensures(IsValidPreResolve);
-    }
-    public bool IsValidPreResolve => Bindings.ArgumentBindings is [_, _, { Actual: SeqDisplayExpr { Elements: [] } }, _];
-    internal void AddScopeArgs(INewOrOldResolver resolver, ResolutionContext context) {
-      Contract.Requires(IsValidPreResolve);
-      //static List<T?> getThingsFromScope<T>(Scope<T> s) where T : class =>
-      //    (s.GetType()
-      //      .GetField("things", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-      //      .GetValue(s) as List<T?>)!;
-      //Seq.Elements.AddRange(getThingsFromScope(resolver.Scope).IgnoreNulls().Distinct().Select(v => {
-      //  var e = VariableNameWrappedIn_ProtectScope_Call(v.Name);
-      //  var ns = (e.Bindings.ArgumentBindings.First(b => b.Actual is NameSegment _ns && _ns.Name == v.Name).Actual as NameSegment)!;
-
-      //  var id = new IdentifierExpr(SourceOrigin.NoToken, v);
-      //  ns.ResolvedExpression = id;
-      //  ns.Type = id.Type.UseInternalSynonym();
-      //  return e;
-      //}));
-      Bindings.ArgumentBindings.First(ab => ReferenceEquals(ab.Actual, PlaceholderScope)).Actual = new SeqDisplayExpr(SourceOrigin.NoToken, [.. resolver.ScopeArgsFrom(context)]);
-      //System.Console.WriteLine('[' + string.Join(", ", Seq.Elements) + ']');
-    }
-
-    public override ProtectToProveApplySuffix WithProtections(Protector protector) => throw new UnreachableException($"Due to the nature of the protection applied over the AST, no part of the AST should be processed more than once; this expression signals that a part of the AST ({this}) is to be processed at least twice");
   }
+  public class ProtectToProveImmediateApplySuffix(Expression e, Protector protector, BigInteger id) : BaseProtectToProveApplySuffix(e, protector, id) { }
 }

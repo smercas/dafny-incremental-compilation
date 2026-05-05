@@ -107,7 +107,7 @@ public static class ProtectorFunctions {
       case ProtectorFunction.WithContext { Protector: var protector, ChangeContext: var changeContext }:
         return new ProtectToProveApplySuffix(expression, protector, changeContext);
       case ProtectorFunction.WithEntryPoint { Protector: var protector, EntryPoint: var entryPoint }:
-        return new ProtectToProveApplySuffix(expression, protector, entryPoint);
+        return new ProtectToProveImmediateApplySuffix(expression, protector, entryPoint);
     }
     throw new ArgumentException("\"protectorFunction\" needs to be either `_protect`, `_protectToProve` or `_protectScope`");
   }
