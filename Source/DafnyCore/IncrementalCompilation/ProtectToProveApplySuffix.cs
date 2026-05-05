@@ -19,7 +19,7 @@ namespace DafnyCore.IncrementalCompilation {
 
     public new BaseProtectToProveApplySuffix Clone(Cloner cloner) => throw new InvalidOperationException("`ProtectToProveApplySuffix` logic does not allow for cloning");
 
-    protected BaseProtectToProveApplySuffix(Expression e, Protector protector, BigInteger? id = null) : base(e.Origin, null, ProtectorFunctions.ProtectToProveImmediate.ToExprDotName(), [
+    protected BaseProtectToProveApplySuffix(Expression e, Protector protector, ProtectorFunctions.ProtectorFunction function, BigInteger? id = null) : base(e.Origin, null, function.ToExprDotName(), [
         new(null, e.WithProtections(protector)),
       new(null, new StringLiteralExpr(SourceOrigin.NoToken, e.ToString(), false)),
       new(null, PlaceholderScope),
@@ -146,10 +146,10 @@ namespace DafnyCore.IncrementalCompilation {
     public static IReadOnlySet<ModuleDecl> ChangedModules => changedModulesLazy.Value;
     private static Lazy<IReadOnlySet<MemberDecl>> changedMembersLazy { get; set; } = new();
     public static IReadOnlySet<MemberDecl> ChangedMembers => changedMembersLazy.Value;
-    public ProtectToProveApplySuffix(Expression e, Protector protector, ChangeContext changeContext) : base(e, protector) {
+    public ProtectToProveApplySuffix(Expression e, Protector protector, ChangeContext changeContext) : base(e, protector, ProtectorFunctions.ProtectToProve) {
       instances.Add(this);
       ChangeContexts[this] = changeContext;
     }
   }
-  public class ProtectToProveImmediateApplySuffix(Expression e, Protector protector, BigInteger id) : BaseProtectToProveApplySuffix(e, protector, id) { }
+  public class ProtectToProveImmediateApplySuffix(Expression e, Protector protector, BigInteger id) : BaseProtectToProveApplySuffix(e, protector, ProtectorFunctions.ProtectToProveImmediate, id) { }
 }
