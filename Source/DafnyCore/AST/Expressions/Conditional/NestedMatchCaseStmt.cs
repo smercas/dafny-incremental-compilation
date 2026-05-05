@@ -46,6 +46,7 @@ public class NestedMatchCaseStmt : NestedMatchCase, IAttributeBearingDeclaration
     var afterResolveErrorCount = resolver.Reporter.ErrorCount;
     if (beforeResolveErrorCount == afterResolveErrorCount) {
       resolver.DominatingStatementLabels.PushMarker();
+      if (PrependedProtectionsCount > 0) { Body = [.. Util.Concat(Body.Take(PrependedProtectionsCount).Where(s => ProtectionFilter(resolver, s)), Body.Skip(PrependedProtectionsCount))]; }
       foreach (Statement ss in Body) {
         resolver.ResolveStatementWithLabels(ss, resolutionContext);
       }
@@ -55,8 +56,10 @@ public class NestedMatchCaseStmt : NestedMatchCase, IAttributeBearingDeclaration
   }
 
   protected NestedMatchCaseStmt(Protector protector, NestedMatchCaseStmt original) : base(protector, original) {
+    var toBeProtected = original.Pat.ToBeProtected.ToList();
+    PrependedProtectionsCount = toBeProtected.Count;
     Body = [
-      .. original.Pat.ToBeProtected.Select(ProtectorExtensions.ToProtectAssertion),
+      .. toBeProtected.Select(ProtectorExtensions.ToProtectAssertion),
       .. original.Body.WithProtections(protector)
     ];
     Attributes = protector.Clone(original.Attributes);

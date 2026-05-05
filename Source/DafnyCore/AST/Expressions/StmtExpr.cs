@@ -94,4 +94,14 @@ public class StmtExpr : Expression, ICanFormat, ICloneable<StmtExpr> {
     S = original.S.WithProtections(protector);
   }
   public override StmtExpr WithProtections(Protector protector) => new(protector, this);
+
+  public Expression Where(System.Func<Statement, bool> predicate) {
+    var cloner = new Cloner();
+    var filteredTail = E switch {
+      StmtExpr se => se.Where(predicate),
+      _ => cloner.CloneExpr(E),
+    };
+    if (!predicate(S)) { return filteredTail; }
+    return new StmtExpr(cloner.Origin(Origin), cloner.CloneStmt(S, false), filteredTail);
+  }
 }

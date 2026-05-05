@@ -2,6 +2,7 @@
 
 using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
 
@@ -37,6 +38,10 @@ public class NestedMatchCaseExpr : NestedMatchCase, IAttributeBearingDeclaration
     resolver.ResolveAttributes(this, resolutionContext);
     var afterResolveErrorCount = resolver.reporter.ErrorCount;
     if (beforeResolveErrorCount == afterResolveErrorCount) {
+      if (PrependedProtectionsCount > 0) {
+        Contract.Assert(Body is StmtExpr);
+        Body = (Body as StmtExpr)!.Where(s => ProtectionFilter(resolver, s));
+      }
       resolver.ResolveExpression(Body, resolutionContext);
       resolver.ConstrainSubtypeRelation(resultType, Body.Type, Body.Origin, "type of case bodies do not agree (found {0}, previous types {1})", Body.Type, resultType);
     }
@@ -49,7 +54,12 @@ public class NestedMatchCaseExpr : NestedMatchCase, IAttributeBearingDeclaration
   }
 
   protected NestedMatchCaseExpr(Protector protector, NestedMatchCaseExpr original) : base(protector, original) {
-    Body = original.Body.WithProtections(protector).WithPrependedAssertionsIfAny(original.Pat.ToBeProtected.Select(ProtectorExtensions.ToProtectAssertion));
+    var toBeProtected = original.Pat.ToBeProtected.ToList();
+    PrependedProtectionsCount = toBeProtected.Count;
+    Body = original.Body.WithProtections(protector);
+    if (PrependedProtectionsCount > 0) {
+      Body = Body.WithPrependedAssertions(toBeProtected.Select(ProtectorExtensions.ToProtectAssertion));
+    }
     Attributes = protector.Clone(original.Attributes);
   }
   public override NestedMatchCaseExpr WithProtections(Protector protector) => new(protector, this);

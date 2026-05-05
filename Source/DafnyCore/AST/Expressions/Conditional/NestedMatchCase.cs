@@ -16,6 +16,8 @@ public abstract class NestedMatchCase : NodeWithOrigin, IProtectable<NestedMatch
     Pat.CheckLinearExtendedPattern(type, resolutionContext, resolver);
   }
 
+  public int PrependedProtectionsCount { get; protected set; }
+  public static bool ProtectionFilter(ModuleResolver resolver, Statement s) => !resolver.moduleInfo.Ctors.ContainsKey(ProtectorFunctions.getIdentityFromProtectFunctionCall(((s as AssertStmt)!.Expr as ApplySuffix)!).Name);
   protected NestedMatchCase(Protector protector, NestedMatchCase original) : base(protector, original) {
     Pat = original.Pat.WithProtections(protector);
   }

@@ -58,7 +58,9 @@ namespace DafnyCore.IncrementalCompilation {
     // Weaker version of `WithPrependedAssertions` that doesn't guarantee that the result is a `StmtExpr`, but can accept an empty enumerable
     public static Expression WithPrependedAssertionsIfAny(this Expression e, IEnumerable<AssertStmt> ss) {
       Contract.Ensures(!ss.Any() || Contract.Result<Expression>() is StmtExpr);
-      return ss.Reverse().Aggregate(e, (prev, s) => new StmtExpr(prev.Origin, s, prev));
+      var l = ss.ToList();
+      if (l.Count == 0) { return e; }
+      return l.Reversed().Aggregate(e, (prev, s) => new StmtExpr(prev.Origin, s, prev));
     }
 
     public static BinaryExpr WithPrependedExpressions(this Expression e, Expression first, params Expression[] secondUntilLast) => e.WithPrependedExpressions([first, .. secondUntilLast]);
@@ -74,7 +76,7 @@ namespace DafnyCore.IncrementalCompilation {
       Contract.Ensures(!ss.Any() || Contract.Result<Expression>() is StmtExpr);
       var l = ss.ToList();
       if (l.Count == 0) { return e; }
-      return l.Reversed().Aggregate(e.WrapWithParensIfNecessary() as Expression, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev)); // IPMTODO: check if it's ok to make a ParensExpression here if the enumerable is empty
+      return l.Reversed().Aggregate(e.WrapWithParensIfNecessary() as Expression, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev));
     }
     private static ParensExpression WrapWithParensIfNecessary(this Expression e) => e switch {
       ParensExpression pe => pe,

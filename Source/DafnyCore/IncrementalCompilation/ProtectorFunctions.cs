@@ -1,13 +1,16 @@
 ﻿#nullable enable
+using Microsoft.Dafny;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.Contracts;
+using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
-using System.Diagnostics;
-using Microsoft.Dafny;
-using System.Numerics;
 using static DafnyCore.IncrementalCompilation.ProtectToProveApplySuffix;
+using static Microsoft.Dafny.BoogieGenerator;
 
 namespace DafnyCore.IncrementalCompilation;
 public static class ProtectorFunctions {
@@ -21,6 +24,7 @@ public static class ProtectorFunctions {
   }
 
 
+  public static NameSegment getIdentityFromProtectFunctionCall(ApplySuffix call) => (call.Bindings.ArgumentBindings[0].Actual as NameSegment)!;
   private static Function protectFunction() {
     var typeVar = "T".ToTypeParameter();
     return ProtectorFunctionBase(
@@ -44,7 +48,7 @@ public static class ProtectorFunctions {
       signature: (
         ("x", typeVar).ToFormal(), [
         ("name", StringType()).ToFormal(),
-      ], typeVar.ToType())
+        ], typeVar.ToType())
     );
   }
   private static Function protectScopeFunction() {
