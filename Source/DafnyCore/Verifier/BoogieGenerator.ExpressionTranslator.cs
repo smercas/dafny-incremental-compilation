@@ -853,6 +853,17 @@ namespace Microsoft.Dafny {
         }
       }
 
+      public Expr TranslateString(string s, bool isVerbatim = true) => TranslateString(s, Token.NoToken, isVerbatim);
+      public Expr TranslateString(string s, IOrigin tok, bool isVerbatim = true) {
+        Expr seq = BoogieGenerator.FunctionCall(tok, BuiltinFunction.SeqEmpty, Predef.BoxType);
+        foreach (var ch in UnescapedCharacters(options, s, isVerbatim)) {
+          var rawElement = BoogieGenerator.FunctionCall(tok, BuiltinFunction.CharFromInt, null, Expr.Literal(ch));
+          Expr elt = BoxIfNecessary(tok, rawElement, Type.Char);
+          seq = BoogieGenerator.FunctionCall(tok, BuiltinFunction.SeqBuild, Predef.BoxType, seq, elt);
+        }
+        return MaybeLit(seq, BoogieGenerator.TrType(new SeqType(Type.Char)));
+      }
+
       private Expr TranslateLiteralExpr(LiteralExpr literalExpr) {
         LiteralExpr e = literalExpr;
         if (e.Value == null) {
@@ -870,13 +881,7 @@ namespace Microsoft.Dafny {
           return MaybeLit(rawElement, Predef.CharType);
         } else if (e is StringLiteralExpr) {
           var str = (StringLiteralExpr)e;
-          Boogie.Expr seq = BoogieGenerator.FunctionCall(GetToken(literalExpr), BuiltinFunction.SeqEmpty, Predef.BoxType);
-          foreach (var ch in Util.UnescapedCharacters(options, (string)e.Value, str.IsVerbatim)) {
-            var rawElement = BoogieGenerator.FunctionCall(GetToken(literalExpr), BuiltinFunction.CharFromInt, null, Boogie.Expr.Literal(ch));
-            Boogie.Expr elt = BoxIfNecessary(GetToken(literalExpr), rawElement, Type.Char);
-            seq = BoogieGenerator.FunctionCall(GetToken(literalExpr), BuiltinFunction.SeqBuild, Predef.BoxType, seq, elt);
-          }
-          return MaybeLit(seq, BoogieGenerator.TrType(new SeqType(Type.Char)));
+          return TranslateString(str.Value as string, GetToken(str), str.IsVerbatim);
         } else if (e.Value is BigInteger) {
           var n = Microsoft.BaseTypes.BigNum.FromBigInt((BigInteger)e.Value);
           if (e.Type.NormalizeToAncestorType() is BitvectorType bitvectorType) {

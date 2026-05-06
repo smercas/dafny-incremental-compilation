@@ -17,6 +17,7 @@ using Microsoft.Boogie;
 using Std.Wrappers;
 using static Microsoft.Dafny.Util;
 using PODesc = Microsoft.Dafny.ProofObligationDescription;
+using DafnyCore.IncrementalCompilation;
 
 namespace Microsoft.Dafny {
 
@@ -132,6 +133,55 @@ namespace Microsoft.Dafny {
   }
 
   public partial class BoogieGenerator {
+#nullable enable
+    private class ProtectionContext {
+      private Stack<ProtectToProveApplySuffix> ProtectToProveCalls { get; } = [];
+      private sealed class AddedProtectToProveCall : IDisposable {
+        private ProtectionContext context { get; }
+        private ProtectToProveApplySuffix call { get; }
+        private bool disposed { get; set; }
+
+        public AddedProtectToProveCall(ProtectionContext context, ProtectToProveApplySuffix call) {
+          this.context = context;
+          this.call = call;
+          context.ProtectToProveCalls.Push(call);
+        }
+
+        public void Dispose() {
+          if (disposed) { return; }
+          disposed = true;
+          var popped = context.ProtectToProveCalls.Pop();
+          if (!ReferenceEquals(popped, call)) { throw new InvalidOperationException("Dispose order violated"); }
+        }
+      }
+      private sealed class Noop : IDisposable { public void Dispose() { } }
+      public IDisposable PushProtectToProveCall(ProtectToProveApplySuffix call) => new AddedProtectToProveCall(this, call);
+      public IDisposable PushIfProtectToProveCall(ConcreteSyntaxExpression expr) => expr switch {
+        ProtectToProveApplySuffix call => PushProtectToProveCall(call),
+        _ => new Noop(),
+      };
+      public ProtectToProveApplySuffix? MostRecentProtectToProveCall {
+        get {
+          if (ProtectToProveCalls.TryPeek(out var r)) { return r; }
+          return null;
+        }
+      }
+    }
+    private ProtectionContext protectionContext { get; } = new();
+    public IDisposable PushProtectToProveCall(ProtectToProveApplySuffix call) => protectionContext.PushProtectToProveCall(call);
+    public IDisposable PushIfProtectToProveCall(ConcreteSyntaxExpression expr) => protectionContext.PushIfProtectToProveCall(expr);
+
+    public Bpl.PredicateCmd AssertWrappedWithProtectToProveWFIfNecessary(ExpressionTranslator etran, IOrigin tok, Bpl.Expr condition, ProofObligationDescription description,
+      BodyTranslationContext context, Bpl.QKeyValue? kv = null) => Assert(tok, WrappedWithProtectToProveWFIfNecessary(condition, tok, etran, description), description, context, kv);
+
+    public Expr WrappedWithProtectToProveWFIfNecessary(Expr wfCheck, IOrigin tok, ExpressionTranslator etran, ProofObligationDescription desc) => protectionContext.MostRecentProtectToProveCall is null ? wfCheck :
+      ProtectorFunctions.WrappedWithProtectToProveWF(wfCheck, tok, protectionContext.MostRecentProtectToProveCall, etran, Options, desc);
+
+
+
+#nullable disable
+
+
     public void CheckWellformedAndAssume(Expression expr, WFOptions wfOptions, Variables locals, BoogieStmtListBuilder builder, ExpressionTranslator etran, string comment) {
       Contract.Requires(expr != null);
       Contract.Requires(expr.Type != null && expr.Type.IsBoolType);
@@ -1052,7 +1102,7 @@ namespace Microsoft.Dafny {
                     zero = Bpl.Expr.Literal(0);
                   }
                   CheckWellformed(e.E1, wfOptions, locals, builder, etran);
-                  builder.Add(Assert(GetToken(expr), Bpl.Expr.Neq(etran.TrExpr(e.E1), zero),
+                  builder.Add(AssertWrappedWithProtectToProveWFIfNecessary(etran, GetToken(expr), Bpl.Expr.Neq(etran.TrExpr(e.E1), zero),
                     new DivisorNonZero(e.E1), builder.Context, wfOptions.AssertKv));
                 }
                 break;
@@ -1418,6 +1468,7 @@ namespace Microsoft.Dafny {
           }
         case ConcreteSyntaxExpression expression: {
             var e = expression;
+            using var pctx = PushIfProtectToProveCall(e);
             CheckWellformedWithResult(e.ResolvedExpression, wfOptions, locals, builder, etran, addResultCommands);
             addResultCommands = null;
             break;

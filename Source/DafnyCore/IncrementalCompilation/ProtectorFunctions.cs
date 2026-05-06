@@ -20,7 +20,8 @@ public static class ProtectorFunctions {
     ProtectScope = new("_protectScope", null!); ProtectScope = ProtectScope with { Function = protectScopeFunction(), };
     ProtectToProve = new("_protectToProve", null!, null!, null!); ProtectToProve = ProtectToProve with { Function = protectToProveFunction(), };
     ProtectToProveImmediate = new("_protectToProveImmediate", null!, null!, BigInteger.Zero); ProtectToProveImmediate = ProtectToProveImmediate with { Function = protectToProveImmediateFunction(), };
-    All = [NewProtect, OldProtect, ProtectScope, ProtectToProve, ProtectToProveImmediate];
+    ProtectToProveWF = new("_protectToProveWF", null!); ProtectToProveWF = ProtectToProveWF with { Function = protectToProveWFFunction(), };
+    All = [NewProtect, OldProtect, ProtectScope, ProtectToProve, ProtectToProveImmediate, ProtectToProveWF];
   }
 
 
@@ -90,6 +91,18 @@ public static class ProtectorFunctions {
       ], typeVar.ToType())
     );
   }
+  private static Function protectToProveWFFunction() {
+    var typeVar = "T".ToTypeParameter();
+    return IdentityOf(
+      typeArgs: [typeVar,],
+      name: ProtectToProveWF.Name,
+      signature: (("x", typeVar).ToFormal(), [
+        ("name", StringType()).ToFormal(),
+        ("scope", new SeqType(new BoolType())).ToFormal(),
+        ("id", new IntType()).ToFormal(),
+      ], typeVar.ToType())
+    );
+  }
   public static ApplySuffix WrappedWith(this Expression expression, ProtectorFunction protectorFunction) {
     if (ReferenceEquals(protectorFunction, NewProtect)) {
       return new(expression.Origin, null, NewProtect.ToExprDotName(), [
@@ -126,6 +139,22 @@ public static class ProtectorFunctions {
     }
     throw new ArgumentException("\"protectorFunction\" needs to be either `_protect`, `_protectScope`");
   }
+  public static Microsoft.Boogie.Expr WrappedWithProtectToProveWF(Microsoft.Boogie.Expr wfCheck, IOrigin tok, ProtectToProveApplySuffix protectToProveExpr, ExpressionTranslator etran, DafnyOptions options, ProofObligationDescription desc) {
+    Contract.Requires(wfCheck.Type == Microsoft.Boogie.Type.Bool);
+    var resolvedProtectToProveExpr = (protectToProveExpr.ResolvedExpression as FunctionCallExpr)!;
+    List<(Microsoft.Boogie.Expr e, Microsoft.Dafny.Type dt)> args = [
+      (wfCheck, Microsoft.Dafny.Type.Bool),
+      (etran.TranslateString(desc.GetAssertedExpr(options).ToString()), resolvedProtectToProveExpr.Args[1].Type),
+      .. resolvedProtectToProveExpr.Args.Skip(2).Select(a => (etran.TrExpr(a.Resolved), a.Type))];
+    return etran.BoogieGenerator.CondApplyUnbox(tok, new Microsoft.Boogie.NAryExpr(tok, new Microsoft.Boogie.FunctionCall(new Microsoft.Boogie.IdentifierExpr(tok, ProtectToProveWF.Function.FullSanitizedName, Microsoft.Boogie.Type.Bool)), [
+      etran.BoogieGenerator.TypeToTy(Microsoft.Dafny.Type.Bool),
+      etran.BoogieGenerator.GetRevealConstant(ProtectToProveWF.Function),
+      .. args.Zip(resolvedProtectToProveExpr.Function.Ins.Select(i => i.Type)).Select(a => etran.BoogieGenerator.AdaptBoxing(tok, a.First.e, a.First.dt, a.Second)),
+    ]), ProtectToProveWF.Function.ResultType, Microsoft.Dafny.Type.Bool);
+  }
+
+  public static Microsoft.Boogie.Expr WrappedWithProtectToProveWF(Microsoft.Boogie.Expr wfCheck, Expression causeOfWfCheck, ProtectToProveApplySuffix protectToProveExpr, ExpressionTranslator etran, DafnyOptions options, ProofObligationDescription desc) =>
+    WrappedWithProtectToProveWF(wfCheck, etran.GetToken(causeOfWfCheck), protectToProveExpr, etran, options, desc);
 
   public record ProtectorFunction(string Name, Function Function) {
     public sealed record WithEntryPoint(string Name, Function Function, Protector Protector, BigInteger EntryPoint) : ProtectorFunction(Name, Function);
@@ -137,6 +166,7 @@ public static class ProtectorFunctions {
   public static ProtectorFunction ProtectScope { get; }
   public static ProtectorFunction.WithContext ProtectToProve { get; }
   public static ProtectorFunction.WithEntryPoint ProtectToProveImmediate { get; }
+  public static ProtectorFunction ProtectToProveWF { get; }
   public static ICollection<ProtectorFunction> All { get; }
   public static string ContainingModuleName { get; } = "_protectors";
 

@@ -3890,7 +3890,7 @@ namespace Microsoft.Dafny {
     /// <summary>
     /// Translates an AST Type to a Boogie expression of type Ty.
     /// </summary>
-    Bpl.Expr TypeToTy(Type type) {
+    public Bpl.Expr TypeToTy(Type type) {
       Contract.Requires(type != null);
       Contract.Ensures(Contract.Result<Bpl.Expr>() != null);
 
