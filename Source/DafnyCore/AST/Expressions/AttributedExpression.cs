@@ -47,15 +47,14 @@ public class AttributedExpression : NodeWithOrigin, IAttributeBearingDeclaration
   public AttributedExpression WithProtections(Protector protector, Kind? kind) {
     AttributedExpression CreateFrom(Expression E) => new(E, Label.ApplyIfNotNull(protector.Clone), protector.Clone(Attributes));
     return kind switch {
-      Kind.Ensures when Attributes.Contains(Attributes, Constants.AttributeName) =>
+      Kind.Ensures or Kind.Invariant when Attributes.Contains(Attributes, Constants.AttributeName) =>
         protector.WithAttributeAdditionalContext(() => CreateFrom(
           E.WrappedWith(ProtectorFunctions.ProtectToProve with {
             Protector = protector,
             ChangeContext = new ProtectToProveApplySuffix.ChangeContext(protector.MostRecentContext),
           })
         )),
-      Kind.Invariant or
-      Kind.Ensures or null => CreateFrom(E.WithProtections(protector)),
+      Kind.Ensures or Kind.Invariant or null => CreateFrom(E.WithProtections(protector)),
       _ => throw new UnreachableException(),
     };
   }

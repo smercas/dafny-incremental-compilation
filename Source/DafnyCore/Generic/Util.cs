@@ -38,8 +38,16 @@ namespace Microsoft.Dafny {
       DatatypeValue dv => dv.Bindings.ArgumentBindings.SelectMany(ab => ab.Actual.PreResolveRecursiveSubStatements()),
       _ => e.SubExpressions.SelectMany(PreResolveRecursiveSubStatements),
     };
-    public static IEnumerable<Statement> PreResolveRecursiveSubStatements(this Statement s) =>
-      Concat([s], s.PreResolveSubStatements.SelectMany(PreResolveRecursiveSubStatements), s.PreResolveSubExpressions.SelectMany(PreResolveRecursiveSubStatements));
+    public static IEnumerable<Statement> PreResolveRecursiveSubStatements(this AttributedExpression ae) => ae.E.PreResolveRecursiveSubStatements();
+    public static IEnumerable<Statement> PreResolveRecursiveSubStatements(this Statement s) => Concat([s],
+      s.PreResolveSubStatements.SelectMany(PreResolveRecursiveSubStatements), s.PreResolveSubExpressions.SelectMany(PreResolveRecursiveSubStatements),
+      s is LoopStmt ls ? Concat(
+        ls.Invariants.SelectMany(PreResolveRecursiveSubStatements),
+        Concat(
+          (ls.Mod.Expressions ?? []).Select(static fe => fe.OriginalExpression),
+          ls.Decreases.Expressions ?? []
+        ).SelectMany(e => e.PreResolveRecursiveSubStatements())
+      ) : []);
 
     public static IEnumerable<Expression> PreResolveRecursiveSubExpressions(this Expression e) => Concat([e], e switch {
       StmtExpr se => Concat(se.S.PreResolveRecursiveSubExpressions(), se.E.PreResolveRecursiveSubExpressions()),
@@ -47,9 +55,16 @@ namespace Microsoft.Dafny {
       DatatypeValue dv => dv.Bindings.ArgumentBindings.SelectMany(ab => ab.Actual.PreResolveRecursiveSubExpressions()),
       _ => e.SubExpressions.SelectMany(PreResolveRecursiveSubExpressions),
     });
-
+    public static IEnumerable<Expression> PreResolveRecursiveSubExpressions(this AttributedExpression ae) => Concat([ae.E], ae.E.PreResolveRecursiveSubExpressions());
     public static IEnumerable<Expression> PreResolveRecursiveSubExpressions(this Statement s) =>
-      Concat(s.PreResolveSubStatements.SelectMany(PreResolveRecursiveSubExpressions), s.PreResolveSubExpressions.SelectMany(PreResolveRecursiveSubExpressions));
+      Concat(s.PreResolveSubStatements.SelectMany(PreResolveRecursiveSubExpressions), s.PreResolveSubExpressions.SelectMany(PreResolveRecursiveSubExpressions),
+      s is LoopStmt ls ? Concat(
+        ls.Invariants.SelectMany(PreResolveRecursiveSubExpressions),
+        Concat(
+          (ls.Mod.Expressions ?? []).Select(static fe => fe.OriginalExpression),
+          ls.Decreases.Expressions ?? []
+        ).SelectMany(e => e.PreResolveRecursiveSubExpressions())
+      ) : []);
 
     public static bool All(this IEnumerable<bool> es) => es.All(e => e);
 

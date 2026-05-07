@@ -35,7 +35,7 @@ namespace DafnyCore.IncrementalCompilation {
 
           sd.EnclosingModuleDefinition = def;
           if (sd is LiteralModuleDecl lmd) { lmd.ModuleDef.EnclosingModule = def; }
-          if (sd is ClassDecl { NonNullTypeDecl: var classDeclNonNullTypeDecl and not null } ) { classDeclNonNullTypeDecl.EnclosingModuleDefinition = def; }
+          if (sd is ClassDecl { NonNullTypeDecl: var classDeclNonNullTypeDecl and not null }) { classDeclNonNullTypeDecl.EnclosingModuleDefinition = def; }
         }
         return decl;
       }
@@ -79,7 +79,7 @@ namespace DafnyCore.IncrementalCompilation {
           var trace = Trace(EnclosingDecl);
           var refinementTargetParts = trace.Select(d => d.Name);
           IEnumerable<string> enclosingDeclName = [];
-          if (EnclosingDecl is not DefaultClassDecl) { enclosingDeclName = [ EnclosingDecl.Name ]; }
+          if (EnclosingDecl is not DefaultClassDecl) { enclosingDeclName = [EnclosingDecl.Name]; }
           var def = new ModuleDefinition(
             MemberDecl.Origin,
             $"{string.Join("_", [.. refinementTargetParts, .. enclosingDeclName])}_{MemberDecl.Name}".ToNameNodeWithVirtualToken(),
@@ -136,24 +136,13 @@ namespace DafnyCore.IncrementalCompilation {
         protected override ConstantField CreateDuplicateOfOriginalMemberDecl() => throw new NotImplementedException();
         protected override void AlterOriginalMemberDecl() => throw new NotImplementedException();
       }
-      public class FromMethodOrFunction<E>(E enclosingDecl, MethodOrFunction methodOrFunction, IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> attrInContract, IReadOnlySet<AttributesAccessor> attrInBody) : FromMemberDecl<E, MethodOrFunction>(enclosingDecl, methodOrFunction) where E : TopLevelDeclWithMembers {
-        private IReadOnlyDictionary<AttributedExpression, IReadOnlySet<AttributesAccessor>> AttrInContract { get; } = attrInContract;
-        private IReadOnlySet<AttributesAccessor> AttrInBody { get; } = attrInBody;
+      public class FromMethodOrFunction<E>(E enclosingDecl, MethodOrFunction methodOrFunction, IReadOnlySet<AttributesAccessor> withRelevantAttrs) : FromMemberDecl<E, MethodOrFunction>(enclosingDecl, methodOrFunction) where E : TopLevelDeclWithMembers {
+        private IReadOnlySet<AttributesAccessor> WithRelevantAttrs { get; } = withRelevantAttrs;
         protected override MethodOrFunction CreateDuplicateOfOriginalMemberDecl() => MemberDecl.WithProtections(new());
 
         protected override void AlterOriginalMemberDecl() {
-          foreach (var acc in Microsoft.Dafny.Util.Concat(AttrInContract.Values.SelectMany(v => v), AttrInBody)) {
-            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, Constants.AttributeName);
-          }
-          foreach (var acc in Microsoft.Dafny.Util.Concat(
-            AttrInContract.Keys.SelectMany(k => ContainingAttr(k, Constants.ImmediateAttributeName)), // {:ipm_now} can't be found in an ensures clause that doesn't have {:ipm}
-            MemberDecl switch {
-              Microsoft.Dafny.Function f => ContainingAttr(f.Body!, Constants.ImmediateAttributeName),
-              MethodOrConstructor m => ContainingAttr(m.Body!, Constants.ImmediateAttributeName),
-              _ => throw new UnreachableException(),
-            }
-          )) {
-            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, Constants.ImmediateAttributeName);
+          foreach (var acc in WithRelevantAttrs) {
+            (acc.Attributes, _) = Attributes.WithoutFirstOccurenceOf(acc.Attributes, acc.Attr);
           }
         }
       }
@@ -232,28 +221,25 @@ namespace DafnyCore.IncrementalCompilation {
     private static IEnumerable<RefiningModuleGenerator> Split<E>(E dcd) where E : TopLevelDeclWithMembers {
       foreach (var member in dcd.Members) {
         switch (member) {
-          case ConstantField { Rhs: var e and not null, Attributes: var attrs } cf when HasAttr(attrs, Constants.AttributeName) || ContainingAttr(e, Constants.AttributeName).Any():
+          case ConstantField { Rhs: var rhs and not null, Attributes: var attrs } cf when
+            HasEitherOfAttrs(attrs, Constants.AttributeName) ||
+            rhs.PreResolveRecursiveSubStatements().SelectMany(s => ContainingEitherOfAttrs(s, Constants.AttributeName, Constants.ImmediateAttributeName)).Any():
             yield return new RefiningModuleGenerator.FromConstantField<E>(dcd, cf);
             break;
           case ConstantField: break;
           case Field: break;
           case MethodOrFunction m_or_f:
-            //var contractWithAttr = Microsoft.Dafny.Util.Concat(m_or_f.Req.Where(HasAttr), m_or_f.Ens.Where(HasAttr)).ToImmutableHashSet();
-            var attrInContract = m_or_f.Ens.SelectWhere(ens => {
-              var attrs = ContainingAttr(ens, Constants.AttributeName).ToImmutableHashSet() as IReadOnlySet<AttributesAccessor>;
-              return (attrs.Count != 0, (ens, attrs));
-            }).ToImmutableDictionary(p => p.ens, p => p.attrs);
             switch (m_or_f) {
               case Microsoft.Dafny.Function { Body: not null } f
-                  when ContainingAttr(f, Constants.AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
-                yield return new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, f, attrInContract, assertsWithAttr);
+                  when ContainingEitherOfAttrs(f, Constants.AttributeName).ToImmutableHashSet() is var attributeBearing && !attributeBearing.IsEmpty:
+                yield return new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, f, attributeBearing);
                 break;
               case Microsoft.Dafny.Function: break;
               case MethodOrConstructor { Body: not null } m_or_c when
-                  ContainingAttr(m_or_c, Constants.AttributeName).ToImmutableHashSet() is var assertsWithAttr && (!attrInContract.IsEmpty || !assertsWithAttr.IsEmpty):
+                  ContainingEitherOfAttrs(m_or_c, Constants.AttributeName).ToImmutableHashSet() is var attributeBearing && !attributeBearing.IsEmpty:
                 yield return m_or_c switch {
-                  Method m => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, m, attrInContract, assertsWithAttr),
-                  Constructor c => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, c, attrInContract, assertsWithAttr),
+                  Method m => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, m, attributeBearing),
+                  Constructor c => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, c, attributeBearing),
                   _ => throw new UnreachableException(),
                 };
                 break;
@@ -267,39 +253,53 @@ namespace DafnyCore.IncrementalCompilation {
         if (member is ICanVerify) { member.SetOrigin(new VerificationExclusionaryOrigin(member.Origin)); }
       }
     }
-    public static bool HasAttr(Attributes? attrs, string attr) => Attributes.Contains(attrs, attr);
-    public static IEnumerable<AttributesAccessor> ContainingAttr(AttributedExpression ae, string attr) {
-      if (HasAttr(ae.Attributes, attr)) { yield return new AttributesAccessor(ae); }
-      foreach (var aa in ContainingAttr(ae.E, attr)) { yield return aa; }
-    }
-    public static IEnumerable<AttributesAccessor> ContainingAttr(Expression e, string attr) => e.PreResolveRecursiveSubStatements().OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes, attr)).Select(s => new AttributesAccessor(s));
+    public static bool HasEitherOfAttrs(Attributes? attrs, params string[] candidates) => PresentIn(attrs, candidates).Any();
+    public static IEnumerable<string> PresentIn(Attributes? attrs, params string[] candidates) => candidates.Where(candidate => Attributes.Contains(attrs, candidate));
 
-    public static IEnumerable<AttributesAccessor> ContainingAttr(Statement s, string attr) => s.PreResolveRecursiveSubStatements().OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes, attr)).Select(s => new AttributesAccessor(s));
+    // only produces accessors considering the attributes of `AttributedExpression`, disregarding appearances in `ae.E`
+    public static IEnumerable<AttributesAccessor> ContainingEitherOfAttrs(AttributedExpression ae, params string[] attrs) => PresentIn(ae.Attributes, attrs).Select(attr => new AttributesAccessor(ae, attr));
+    
+    // if s is an AssertStmt, this only produces accessors considering the attributes of said `AssertStatement`, disregarding appearances in `assertStmt.Expr`
+    // if s is a LoopStmt, this only produces accessors considering the attributes of its invariants, disregarding appearances in decreases + modifies clauses and whatever body it could have
+    public static IEnumerable<AttributesAccessor> ContainingEitherOfAttrs(Statement s, params string[] attrs) => s switch {
+      AssertStmt assertStmt => PresentIn(assertStmt.Attributes, attrs).Select(attr => new AttributesAccessor(assertStmt, attr)),
+      LoopStmt loopStmt => loopStmt.Invariants.SelectMany(ae => ContainingEitherOfAttrs(ae, attrs)),
+      _ => [],
+    };
 
-    public static IEnumerable<AttributesAccessor> ContainingAttr(MethodOrFunction m_or_f, string attr) =>
+    public static IEnumerable<AttributesAccessor> ContainingEitherOfAttrs(MethodOrFunction m_or_f, params string[] attrs) =>
       Microsoft.Dafny.Util.Concat(
+        Microsoft.Dafny.Util.Concat(m_or_f.Req, m_or_f.Ens).SelectMany(ae => Microsoft.Dafny.Util.Concat(
+          ContainingEitherOfAttrs(ae, attrs),
+          ae.E.PreResolveRecursiveSubStatements().SelectMany(s => ContainingEitherOfAttrs(s, attrs))
+        )),
         Microsoft.Dafny.Util.Concat(
-          Microsoft.Dafny.Util.Concat(m_or_f.Req, m_or_f.Ens).Select(static ae => ae.E),
-          Microsoft.Dafny.Util.Concat([m_or_f.Reads], m_or_f switch { MethodOrConstructor m_or_c => [m_or_c.Mod], Microsoft.Dafny.Function => [], _ => throw new UnreachableException(), })
-            .SelectMany(static s => s.Expressions ?? []).Select(static fe => fe.OriginalExpression),
-          m_or_f.Decreases.Expressions ?? []
-        ).SelectMany(static e => e.PreResolveRecursiveSubStatements()),
-        m_or_f switch {
-          MethodOrConstructor { Body: not null } m_or_c => m_or_c.Body.PreResolveRecursiveSubStatements(),
-          Microsoft.Dafny.Function { Body: not null } f => f.Body.PreResolveRecursiveSubStatements(),
-          _ => throw new UnreachableException(),
-        } ?? []
-      ).OfType<AssertStmt>().Where(assertStmt => HasAttr(assertStmt.Attributes, attr)).Select(s => new AttributesAccessor(s));
+          Microsoft.Dafny.Util.Concat(
+            Microsoft.Dafny.Util.Concat(
+              [m_or_f.Reads], m_or_f switch { MethodOrConstructor m_or_c => [m_or_c.Mod], Microsoft.Dafny.Function => [], _ => throw new UnreachableException(), }
+            ).SelectMany(static s => s.Expressions ?? []).Select(static fe => fe.OriginalExpression),
+            m_or_f.Decreases.Expressions ?? []
+          ).SelectMany(static e => e.PreResolveRecursiveSubStatements()),
+          m_or_f switch {
+            MethodOrConstructor { Body: not null } m_or_c => m_or_c.Body.PreResolveRecursiveSubStatements(),
+            Microsoft.Dafny.Function { Body: not null } f => f.Body.PreResolveRecursiveSubStatements(),
+            _ => throw new UnreachableException(),
+          }
+        ).SelectMany(s => ContainingEitherOfAttrs(s, attrs))
+      );
     public class AttributesAccessor {
+      public string Attr { get; }
       private Func<Attributes?> get { get; }
       private Action<Attributes?> set { get; }
-      public AttributesAccessor(Statement s) {
+      public AttributesAccessor(Statement s, string attr) {
         get = () => s.Attributes;
         set = (value) => s.Attributes = value;
+        Attr = attr;
       }
-      public AttributesAccessor(AttributedExpression e) {
+      public AttributesAccessor(AttributedExpression e, string attr) {
         get = () => e.Attributes;
         set = (value) => e.Attributes = value;
+        Attr = attr;
       }
       public Attributes? Attributes { get => get(); set => set(value); }
     }
