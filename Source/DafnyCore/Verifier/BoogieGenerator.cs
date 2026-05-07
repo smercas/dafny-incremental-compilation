@@ -3569,6 +3569,9 @@ namespace Microsoft.Dafny {
       Contract.Ensures(Contract.Result<Bpl.PredicateCmd>() != null);
 
       Bpl.PredicateCmd cmd;
+
+      condition = WrappedWithProtectToProveWFIfNecessary(condition, tok, description);
+
       if (context.AssertMode == AssertMode.Assume
           || (assertionOnlyFilter != null && !assertionOnlyFilter(tok.ReportingRange.StartToken))
           || (refinesToken.IsInherited(currentModule) && codeContext is not { MustReverify: true })) {
