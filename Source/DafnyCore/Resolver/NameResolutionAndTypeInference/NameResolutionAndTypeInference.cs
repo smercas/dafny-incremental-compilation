@@ -6203,7 +6203,7 @@ namespace Microsoft.Dafny {
     }
 
     IEnumerable<Expression> INewOrOldResolver.ScopeArgsFrom(ResolutionContext context) {
-      return Scope.Names.IgnoreNulls().Distinct().Select(s => s.WrappedWith(ProtectorFunctions.ProtectScope));
+      return Scope.Names.IgnoreNulls().Distinct().Select(ProtectorFunctions.ProtectScope.InvocationFrom);
     }
     public MethodCallInformation ResolveApplySuffix(ApplySuffix e, ResolutionContext resolutionContext, bool allowMethodCall) {
       Contract.Requires(e != null);

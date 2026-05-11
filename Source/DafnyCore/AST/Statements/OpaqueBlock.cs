@@ -64,7 +64,7 @@ public class OpaqueBlock : BlockStmt, ICanResolveNewAndOld, ICloneable<OpaqueBlo
   }
 
   protected OpaqueBlock(Protector protector, OpaqueBlock original) : base(protector, original, null) {
-    Ensures = original.Ensures.ConvertAll(e => e.WithProtections(protector, AttributedExpression.Kind.Ensures));
+    Ensures = original.Ensures.ConvertAll(e => e.WithProtections(protector, AttributedExpression.AEKind.Ensures));
     Modifies = original.Modifies.WithProtections(protector);
   }
 }

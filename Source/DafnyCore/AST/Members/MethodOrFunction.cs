@@ -69,7 +69,7 @@ public abstract class MethodOrFunction : MemberDecl, ICodeContainer, IProtectabl
       .. original.Req.Select(r => r.WithProtections(protector)),
     ];
     Decreases = original.Decreases.WithProtections(protector);
-    Ens = original.Ens.ConvertAll(e => e.WithProtections(protector, AttributedExpression.Kind.Ensures));
+    Ens = original.Ens.ConvertAll(e => e.WithProtections(protector, AttributedExpression.AEKind.Ensures));
     Reads = original.Reads.WithProtections(protector);
     Ins = original.Ins.ConvertAll(p => p.WithProtections(protector));
     SignatureEllipsis = original.SignatureEllipsis;

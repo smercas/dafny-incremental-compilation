@@ -11,18 +11,18 @@ using System.Threading.Tasks;
 namespace DafnyCore.IncrementalCompilation {
   public static class ProtectorExtensions {
     public static bool isWildcardName(this string s) => s.StartsWith("_v") && int.TryParse(s[2..], out _);
-    public static AttributedExpression ToProtectClause(this IVariable e) => e.Name.ToProtectClause();
+    public static AttributedExpression ToProtectClause(this IVariable v) => v.Name.ToProtectClause();
     public static AttributedExpression ToProtectClause(this Expression e) =>
-      ToProtectClauseCore(e.WrappedWith(ProtectorFunctions.NewProtect));
-    public static AttributedExpression ToProtectClause(this string e) =>
-      ToProtectClauseCore(e.WrappedWith(ProtectorFunctions.NewProtect));
+      ToProtectClauseCore(ProtectorFunctions.NewProtect.InvocationFrom(e));
+    public static AttributedExpression ToProtectClause(this string s) =>
+      ToProtectClauseCore(ProtectorFunctions.NewProtect.InvocationFrom(s));
     private static AttributedExpression ToProtectClauseCore(ApplySuffix e) => new(e, null, null); // maybe add label?
 
-    public static AssertStmt ToProtectAssertion(this IVariable e) => e.Name.ToProtectAssertion();
+    public static AssertStmt ToProtectAssertion(this IVariable v) => v.Name.ToProtectAssertion();
     public static AssertStmt ToProtectAssertion(this Expression e) =>
-      ToProtectAssertionCore(e.WrappedWith(ProtectorFunctions.NewProtect));
-    public static AssertStmt ToProtectAssertion(this string e) =>
-      ToProtectAssertionCore(e.WrappedWith(ProtectorFunctions.NewProtect));
+      ToProtectAssertionCore(ProtectorFunctions.NewProtect.InvocationFrom(e));
+    public static AssertStmt ToProtectAssertion(this string s) =>
+      ToProtectAssertionCore(ProtectorFunctions.NewProtect.InvocationFrom(s));
     private static AssertStmt ToProtectAssertionCore(ApplySuffix e) => new(SourceOrigin.NoToken, e, null, null); // maybe add label?
 
     public static UnreachableException CannotAppearBeforeResolution<T>(this T o) where T : notnull => new($"{o} (of type `{typeof(T).Name}`) can't appear before resolution"); // IPMTODO: rename after you remove the old protection

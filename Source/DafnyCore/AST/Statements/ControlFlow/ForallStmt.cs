@@ -190,7 +190,7 @@ public class ForallStmt : Statement, ICloneable<ForallStmt>, ICanFormat {
   protected ForallStmt(Protector protector, ForallStmt original) : base(protector, original) {
     BoundVars = original.BoundVars.ConvertAll(bv => bv.WithProtections(protector));
     Range = original.Range.WithProtections(protector);
-    Ens = original.Ens.ConvertAll(e => e.WithProtections(protector, AttributedExpression.Kind.Ensures));
+    Ens = original.Ens.ConvertAll(e => e.WithProtections(protector, AttributedExpression.AEKind.Ensures));
     Body = original.Body switch {
       BlockStmt blockStmt => blockStmt.WithProtections(protector, original.BoundVars.Select(bv => bv.ToProtectAssertion())),
       _ => throw new UnreachableException("constructor usage indicates that this can only be a `BlockStmt`"),

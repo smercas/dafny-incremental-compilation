@@ -183,7 +183,7 @@ namespace Microsoft.Dafny {
     public IDisposable PushIfProtectToProveCall(ConcreteSyntaxExpression expr, ExpressionTranslator etran) => protectionContext.PushIfProtectToProveCall(expr, etran);
 
     public Expr WrappedWithProtectToProveWFIfNecessary(Expr wfCheck, IOrigin tok, ProofObligationDescription desc) => protectionContext.MostRecentProtectToProveCall is null ? wfCheck :
-      ProtectorFunctions.WrappedWithProtectToProveWF(wfCheck, tok, protectionContext.MostRecentProtectToProveCall, protectionContext.MostRecentExpressionTranslator!, Options, desc);
+      ProtectorFunctions.ProtectToProveWF.InvocationFrom(wfCheck, tok, protectionContext.MostRecentProtectToProveCall, protectionContext.MostRecentExpressionTranslator!, Options, desc);
 
 
 

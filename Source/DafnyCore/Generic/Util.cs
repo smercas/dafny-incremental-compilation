@@ -103,9 +103,17 @@ namespace Microsoft.Dafny {
     public static IEnumerable<R> SelectWhere<T, R>(this IEnumerable<T> es, Func<T, (bool, R)> f) => es.SelectWhere((e, _) => f(e));
     public static IEnumerable<R> SelectWhere<T, R>(this IEnumerable<T> es, Func<T, int, (bool, R)> f) {
       foreach (var (e, i) in es.Indexed()) {
-        (bool not_filtered_out, R result) = f(e, i);
+        var (not_filtered_out, result) = f(e, i);
         if (!not_filtered_out) { continue; }
         yield return result;
+      }
+    }
+    public static IEnumerable<R> SelectManyWhere<T, R>(this IEnumerable<T> es, Func<T, (bool, IEnumerable<R>)> f) => es.SelectManyWhere((e, _) => f(e));
+    public static IEnumerable<R> SelectManyWhere<T, R>(this IEnumerable<T> es, Func<T, int, (bool, IEnumerable<R>)> f) {
+      foreach (var (e, i) in es.Indexed()) {
+        var (not_filtered_out, result) = f(e, i);
+        if (!not_filtered_out) { continue; }
+        foreach (var sub in result) { yield return sub; }
       }
     }
 

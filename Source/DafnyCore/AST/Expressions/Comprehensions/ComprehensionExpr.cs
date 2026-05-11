@@ -130,7 +130,7 @@ public abstract partial class ComprehensionExpr : Expression, IAttributeBearingD
     BoundVars = original.BoundVars.ConvertAll(bv => bv.WithProtections(protector));
     Range = original.Range?.WithProtections(protector);
     if (options == Options.AddProtectionOnBoundVarsInRange) {
-      Range = Range?.WithPrependedExpressionsIfAny(original.BoundVars.Select(bv => bv.Name.WrappedWith(ProtectorFunctions.NewProtect)));
+      Range = Range?.WithPrependedExpressionsIfAny(original.BoundVars.Select(bv => ProtectorFunctions.NewProtect.InvocationFrom(bv.Name)));
     }
     Attributes = protector.Clone(original.Attributes);
     Term = original.Term.WithProtections(protector);

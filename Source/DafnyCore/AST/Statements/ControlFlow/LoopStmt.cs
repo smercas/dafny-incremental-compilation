@@ -92,7 +92,7 @@ public abstract class LoopStmt : LabeledStatement, IHasNavigationToken {
   public TokenRange NavigationRange => ReportingRange;
 
   protected LoopStmt(Protector protector, LoopStmt original) : base(protector, original) {
-    Invariants = original.Invariants.ConvertAll(i => i.WithProtections(protector, AttributedExpression.Kind.Invariant));
+    Invariants = original.Invariants.ConvertAll(i => i.WithProtections(protector, AttributedExpression.AEKind.Invariant));
     Decreases = original.Decreases.WithProtections(protector);
     Mod = original.Mod.WithProtections(protector);
   }

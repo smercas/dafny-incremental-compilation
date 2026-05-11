@@ -42,21 +42,21 @@ public class AttributedExpression : NodeWithOrigin, IAttributeBearingDeclaration
     Attributes = attributes;
   }
 
-  public enum Kind { Ensures, Invariant };
+  public enum AEKind { Ensures, Invariant };
   public AttributedExpression WithProtections(Protector protector) => WithProtections(protector, null);
-  public AttributedExpression WithProtections(Protector protector, Kind? kind) {
+  public AttributedExpression WithProtections(Protector protector, AEKind? kind) {
     AttributedExpression CreateFrom(Expression E) => new(E, Label.ApplyIfNotNull(protector.Clone), protector.Clone(Attributes));
-    return kind switch {
-      Kind.Ensures or Kind.Invariant when Attributes.Contains(Attributes, Constants.AttributeName) =>
-        protector.WithAttributeAdditionalContext(() => CreateFrom(
-          E.WrappedWith(ProtectorFunctions.ProtectToProve with {
-            Protector = protector,
-            ChangeContext = new ProtectToProveApplySuffix.ChangeContext(protector.MostRecentContext),
-          })
-        )),
-      Kind.Ensures or Kind.Invariant or null => CreateFrom(E.WithProtections(protector)),
-      _ => throw new UnreachableException(),
-    };
+    if (kind is AEKind.Ensures or AEKind.Invariant && Attributes.Contains(Attributes, Constants.AttributeName)) {
+      return protector.WithAttributeAdditionalContext(() => CreateFrom((kind switch {
+        AEKind.Ensures => ProtectorFunctions.ProtectToProve as ProtectorFunctions.ProtectorFunction.IChangeContextDependant,
+        AEKind.Invariant => ProtectorFunctions.ProtectToProveInv,
+        _ => throw new UnreachableException(),
+      }).InvocationFrom(E, protector)));
+    }
+    if (kind is AEKind.Ensures or AEKind.Invariant or null) {
+      return CreateFrom(E.WithProtections(protector));
+    }
+    throw new UnreachableException();
   }
 
   public void AddCustomizedErrorMessage(IOrigin tok, string s) {

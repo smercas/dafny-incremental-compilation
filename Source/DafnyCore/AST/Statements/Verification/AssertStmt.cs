@@ -124,19 +124,13 @@ public class AssertStmt : PredicateStmt, ICloneable<AssertStmt>, ICanFormat {
     var immediateAttributeName = Constants.ImmediateAttributeName;
     if (Attributes.Contains(Attributes, Constants.AttributeName)) {
       //Console.WriteLine("Protecting to prove assertion " + a.Expr.ToString());
-      return protector.WithAttributeAdditionalContext(() => new AssertStmt(protector, this, Expr.WrappedWith(ProtectorFunctions.ProtectToProve with {
-        Protector = protector,
-        ChangeContext = new ProtectToProveApplySuffix.ChangeContext(protector.MostRecentContext),
-      })));
+      return protector.WithAttributeAdditionalContext(() => new AssertStmt(protector, this, ProtectorFunctions.ProtectToProve.InvocationFrom(Expr, protector)));
     }
     if (Attributes.Find(Attributes, immediateAttributeName) is { } attr) {
       if (attr is { Args: [] }) { attr.Args.Add(new LiteralExpr(SourceOrigin.NoToken, 0)); } // temporary bcs frontend doesn't use {:ipm_now 0} yet
       if (attr is not { Args: [var arg] }) { throw new Exception($"the {{:{immediateAttributeName}}} attribute requires an argument"); }
       if (arg is not LiteralExpr { Value: BigInteger entryPoint }) { throw new Exception($"{{:{immediateAttributeName}}}'s argument needs to be a natural number"); }
-      return new(protector, this, Expr.WrappedWith(ProtectorFunctions.ProtectToProveImmediate with {
-        Protector = protector,
-        EntryPoint = entryPoint,
-      }));
+      return new(protector, this, ProtectorFunctions.ProtectToProveImmediate.InvocationFrom(Expr, protector, entryPoint));
     }
     //Console.WriteLine($"assert statement: {a.Expr}");
     return new(protector, this);

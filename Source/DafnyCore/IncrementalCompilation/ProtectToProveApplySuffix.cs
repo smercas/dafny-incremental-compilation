@@ -9,6 +9,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
+using static DafnyCore.IncrementalCompilation.ProtectToProveApplySuffix;
 using static Microsoft.Dafny.Change;
 
 namespace DafnyCore.IncrementalCompilation {
@@ -146,10 +147,12 @@ namespace DafnyCore.IncrementalCompilation {
     public static IReadOnlySet<ModuleDecl> ChangedModules => changedModulesLazy.Value;
     private static Lazy<IReadOnlySet<MemberDecl>> changedMembersLazy { get; set; } = new();
     public static IReadOnlySet<MemberDecl> ChangedMembers => changedMembersLazy.Value;
-    public ProtectToProveApplySuffix(Expression e, Protector protector, ChangeContext changeContext) : base(e, protector, ProtectorFunctions.ProtectToProve) {
+    protected ProtectToProveApplySuffix(Expression e, Protector protector, ProtectorFunctions.ProtectorFunction protectorFunction) : base(e, protector, protectorFunction) {
       instances.Add(this);
-      ChangeContexts[this] = changeContext;
+      ChangeContexts[this] = new ChangeContext(protector.MostRecentContext);
     }
+    public ProtectToProveApplySuffix(Expression e, Protector protector) : this(e, protector, ProtectorFunctions.ProtectToProve) {}
   }
+  public class ProtectToProveInvApplySuffix(Expression e, Protector protector) : ProtectToProveApplySuffix(e, protector, ProtectorFunctions.ProtectToProveInv) {}
   public class ProtectToProveImmediateApplySuffix(Expression e, Protector protector, BigInteger id) : BaseProtectToProveApplySuffix(e, protector, ProtectorFunctions.ProtectToProveImmediate, id) { }
 }
