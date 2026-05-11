@@ -123,7 +123,7 @@ public abstract class IncrementalResolver(Program program) : ProgramResolver(pro
 public class InitialIncrementalResolver(Program program) : IncrementalResolver(program) {
   public override ResolutionCache Cache { get; protected set; } = new ResolutionCache();
 
-  protected override void onError() => throw new InvalidOperationException("initial resolution can't have resolution errors, since it's the basis of subsequent resolution runs");
+  protected override void onError() => Reporter.Error(MessageSource.Resolver, "", SourceOrigin.NoToken, "initial resolution can't have resolution errors, since it's the basis of subsequent resolution runs");
   protected override void ResolveSystemModule() {
     Cache = Cache with {
       SystemModuleManager = Program.SystemModuleManager,
