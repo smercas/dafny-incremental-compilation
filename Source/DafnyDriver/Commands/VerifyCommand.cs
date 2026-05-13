@@ -3,6 +3,7 @@ using DafnyCore;
 using DafnyCore.IncrementalCompilation;
 using DafnyCore.Options;
 using DafnyDriver.Commands;
+using DafnyTestGeneration;
 using Microsoft.Boogie;
 using Microsoft.Dafny.Compilers;
 using Microsoft.Dafny.LanguageServer.Language.Symbols;
@@ -108,42 +109,21 @@ public static class VerifyCommand {
         }
       }
       int AbsPositionFrom(IEnumerable<string> split, Position pos) => split.Take(pos.Line - 1).Sum(s => s.Length) + pos.Character - 1;
-      IEnumerable<(string?, string?)> ParseChanges(IEnumerable<string> ss) {
-        var withoutNull = new SortedDictionary<int, Dictionary<string, string?>>();
-        const string pattern = @"^(?<entryPoint>0|[1-9]\d*)(?<kind>wf|ph): (?<text>.*)$";
-        foreach (var s in ss) {
-          var match = Regex.Match(s, pattern);
-
-          if (!match.Success) {
-            throw new ArgumentException($"{s} couldn't be matched with {pattern}");
-          }
-          withoutNull.GetOrCreate(int.Parse(match.Groups["entryPoint"].Value), () => [])[match.Groups["kind"].Value] = match.Groups["text"].Value;
-        }
-        var curr = 0;
-        foreach (var (idx, inner) in withoutNull) {
-          while (curr < idx) {
-            yield return (null, null);
-            curr += 1;
-          }
-          yield return (inner.GetValueOrDefault("wf", null), inner.GetValueOrDefault("ph", null));
-          curr += 1;
-        }
-      }
-      async Task<List<string>?> ReadChanges(List<string> modifications) {
-        while (true) {
+      async Task<bool> InputrocessingLoop() {
+        async Task<bool?> readAndProcessInput() {
           await Write("Enter modification or command (type `:h` for help): ");
-          var modification = (await options.Input.ReadLineAsync())!;
-          switch (modification) {
+          var input = await options.Input.ReadLineAsync();
+          switch (input) {
             case null or ":q": return null;
             case ":h":
               string sep = new('=', 72);
-              await WriteLine(
+              await WriteLine( // IPMTODO: update with :h, :r and :c, explaining what each does, :r resets the changes and :c displays them
                 sep,
                 "Command Input Help",
                 sep,
                 "",
                 "Usage:",
-                "  ((<index>(wf|ph): <modification> | :h)\\n)* <command>",
+                "  ((<entryPoint>(wf|ph|ii|im): <modification> | <entryPoint>im<branchIndex>: <modification> | :h | :r | :c)\\n)* <command>",
                 "",
                 "",
                 "Commands:",
@@ -169,65 +149,81 @@ public static class VerifyCommand {
                 "  :as                Generate all SMT2 files.",
                 "  :s                 (DEFAULT) Generate only the SMT2 files that need",
                 "                   regeneration based on the provided modifications.",
-                "  :r                 Reset Changes from previous input",
                 ""
               );
-              break;
+              return true;
             case ":ad":
               options.Set(IncCompCommand.Option, new PrintAllProcessedDafnyCode());
-              return modifications;
+              return false;
             case ":d":
               options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfChangedVerificationTasks());
-              return modifications;
+              return false;
             case ":ab":
               options.Set(IncCompCommand.Option, new PrintAllBoogieCode());
-              return modifications;
+              return false;
             case ":b":
               options.Set(IncCompCommand.Option, new PrintBoogieCodeOfChangedVerificationTasks());
-              return modifications;
+              return false;
             case ":as":
               options.Set(IncCompCommand.Option, new GenerateAllSMT2Code());
-              return modifications;
+              return false;
             case ":s" or "":
               options.Set(IncCompCommand.Option, new GenerateSMT2CodeOfChangedVerificationTasks());
-              return modifications;
+              return false;
             case ":r":
-              modifications.Clear();
-              break;
+              ProtectToProveApplySuffix.EmptyAllChanges();
+              return true;
+            case ":c": // IPMTODO: see if this works
+              foreach (var (forEntryPoint, entryPoint) in ProtectToProveApplySuffix.ChangesPerEntryPoint.Indexed()) {
+                var nonEmpty = forEntryPoint.Where(c => !c.IsEmptyChange).ToList();
+                if (nonEmpty.Count > 0) {
+                  await WriteLine($"for entry point {entryPoint}:");
+                  foreach (var change in nonEmpty) {
+                    await WriteLine($"\t{change.GetType().Name} ==> {change.Text}");
+                  }
+                }
+              }
+              return true;
             default:
-              if (modification.StartsWith(":d i ")) {
-                options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfEntryPoints(modification[":d i ".Length..].Split(' ').ConvertAll(int.Parse)));
-                return modifications;
+              if (input.StartsWith(":d i ")) {
+                options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfEntryPoints(input[":d i ".Length..].Split(' ').ConvertAll(int.Parse)));
+                return false;
               }
-              if (modification.StartsWith(":d s ")) {
-                options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfSymbols(modification[":d s ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
-                return modifications;
+              if (input.StartsWith(":d s ")) {
+                options.Set(IncCompCommand.Option, new PrintProcessedDafnyCodeOfSymbols(input[":d s ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
+                return false;
               }
-              if (modification.StartsWith(":b m ")) {
-                options.Set(IncCompCommand.Option, new PrintBoogieCodeOfModules(modification[":b m ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
-                return modifications;
+              if (input.StartsWith(":b m ")) {
+                options.Set(IncCompCommand.Option, new PrintBoogieCodeOfModules(input[":b m ".Length..].Split(' ').ConvertAll(static s => s.Split('.'))));
+                return false;
               }
-              modifications.Add(modification);
-              break;
+              try {
+                ProtectToProveApplySuffix.ModifyChangesWith(input);
+              } catch (Exception e) {
+                await WriteLine(e.Message);
+              }
+              return true;
           }
         }
+        while (true) {
+          var stayInLoop = await readAndProcessInput();
+          if (stayInLoop is null) { return false; }
+          if (stayInLoop is false) { break; }
+        }
+        return true;
       }
       var originalBoogieFile = options.Get(DeveloperOptionBag.BoogiePrint);
-      List<string>? modifications = [];
       while (true) {
-        modifications = await ReadChanges(modifications);
-        if (modifications is null) { break; }
+        if (await InputrocessingLoop() is false) { break; }
         if (options.Get(IncCompCommand.Option) is PrintAllBoogieCode or PrintBoogieCodeOfModules or PrintBoogieCodeOfChangedVerificationTasks) {
           options.Set(DeveloperOptionBag.BoogiePrint, "-");
         } else {
           options.Set(DeveloperOptionBag.BoogiePrint, originalBoogieFile);
         }
         options.ApplyBinding(DeveloperOptionBag.BoogiePrint);
-        ProtectToProveApplySuffix.ChangeTexts = ParseChanges(modifications);
         compilation = CliCompilation.Create(options, compilation);
         compilation.Compilation.RootFiles = compilation.Compilation.RootFiles.Then(files => {
-          var changesPerFile = ProtectToProveApplySuffix.ChangesFlattened
-                                .Where(c => !c.IsEmptyChange)
+          var changesPerFile = ProtectToProveApplySuffix.AggregatedNonEmptyChanges
                                 .GroupBy(c => files.First(file => file.Uri == c.Uri))
                                 .Select(g => (g.Key, g.ToImmutableSortedSet(Change.Comparer)));
           foreach (var (file, changes) in changesPerFile) {
@@ -291,8 +287,8 @@ public static class VerifyCommand {
                     break;
                   case PrintProcessedDafnyCodeOfEntryPoints { EntryPoints: var entryPoints }:
                     printer.PrintMembers(
-                      [.. ProtectToProveApplySuffix.Changes.Where((_, i) => entryPoints.Contains(i))
-                                                         .Select(static c => c.WF)
+                      [.. ProtectToProveApplySuffix.ChangesPerEntryPoint.Where((_, i) => entryPoints.Contains(i))
+                                                         .Select(static c => c[0])
                                                          .OfType<IChangeToMemberDecl>()
                                                          .Select(static c => c.MemberDecl)
                                                          .Distinct()],

@@ -124,5 +124,5 @@ public class AlternativeLoopStmt : LoopStmt, ICloneable<AlternativeLoopStmt>, IC
     Alternatives = original.Alternatives.ConvertAll(a => a.WithProtections(protector));
     UsesOptionalBraces = original.UsesOptionalBraces;
   }
-  public override AlternativeLoopStmt WithProtections(Protector protector) => new(protector, this);
+  public override AlternativeLoopStmt WithProtections(Protector protector) => protector.WithAttributeAdditionalContext(() => new AlternativeLoopStmt(protector, this));
 }

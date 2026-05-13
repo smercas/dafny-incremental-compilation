@@ -7,10 +7,6 @@ using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Numerics;
-using System.Text;
-using System.Threading.Tasks;
-using static DafnyCore.IncrementalCompilation.ProtectToProveApplySuffix;
-using static Microsoft.Dafny.Change;
 
 namespace DafnyCore.IncrementalCompilation {
   public abstract class BaseProtectToProveApplySuffix : ApplySuffix, ICloneable<BaseProtectToProveApplySuffix> {
@@ -68,32 +64,47 @@ namespace DafnyCore.IncrementalCompilation {
       foreach (var (instance, idx) in instances.Indexed()) {
         instance.Bindings.ArgumentBindings.First(ab => ReferenceEquals(ab.Actual, PlaceholderId)).Actual = new LiteralExpr(SourceOrigin.NoToken, new BigInteger(idx));
         var (memberDecl, attributeBearingDeclaration) = ChangeContexts[instance].Evaluated;
-        switch (Changes[idx].WF, attributeBearingDeclaration) {
-          case (AssertWFChange assertWFChange, [AssertStmt assertStmt, ..]):
-            assertWFChange.Update(memberDecl, assertStmt);
-            break;
-          case (EnsuresWFChange ensuresWFChange, [AttributedExpression attributedExpression, ..]):
-            ensuresWFChange.Update(memberDecl, attributedExpression);
-            break;
-          default: throw new UnreachableException(); //IPMTODO: from prior debugging, these were hit
-        }
-        switch (Changes[idx].ProofHint, attributeBearingDeclaration, memberDecl) {
-          case (AssertWithByProofHintChange assertWithByProofHintChange, [AssertStmt assertStmt, BlockByProofStmt blockByProofStmt, ..], _) when ReferenceEquals(blockByProofStmt.Body, assertStmt):
-            assertWithByProofHintChange.Update(memberDecl, blockByProofStmt);
-            break;
-          case (AssertWithoutByProofHintChange assertWithoutByProofHintChange, [AssertStmt assertStmt, ..], _):
-            assertWithoutByProofHintChange.Update(memberDecl, assertStmt);
-            break;
-          case (FunctionEnsuresProofHintChange functionEnsuresProofHintChange, [AttributedExpression attributedExpression, ..], Function function):
-            functionEnsuresProofHintChange.Update(function, attributedExpression);
-            break;
-          case (MethodOrConstructorEnsuresProofHintChange methodOrConstructorEnsuresProofHintChange, [AttributedExpression attributedExpression, ..], MethodOrConstructor methodOrConstructor):
-            methodOrConstructorEnsuresProofHintChange.Update(methodOrConstructor, attributedExpression);
-            break;
-          default: throw new UnreachableException(); //IPMTODO: from prior debugging, these were hit
+
+        foreach (var baseChange in ChangesPerEntryPoint[idx]) {
+          switch (baseChange, attributeBearingDeclaration, memberDecl) {
+            case (AssertWFChange change, [AssertStmt assertStmt, ..], _):
+              change.Update(memberDecl); break;
+            case (InvariantWFChange change, [AttributedExpression invariant, LoopStmt loopStmt, ..], _) when loopStmt.Invariants.Contains(invariant):
+              change.Update(memberDecl); break;
+            case (EnsuresWFChange change, [AttributedExpression ensuresClause, ForallStmt forallStmt, ..], _) when forallStmt.Ens.Contains(ensuresClause):
+              change.Update(memberDecl); break;
+            case (EnsuresWFChange change, [AttributedExpression ensuresClause, OpaqueBlock opaqueBlock, ..], _) when opaqueBlock.Ensures.Contains(ensuresClause):
+              change.Update(memberDecl); break;
+            case (EnsuresWFChange change, [AttributedExpression ensuresClause], MethodOrFunction mof) when mof.Ens.Contains(ensuresClause):
+              change.Update(memberDecl); break;
+            case (AssertWithByProofHintChange change, [AssertStmt assertStmt, BlockByProofStmt blockByProofStmt, ..], _) when ReferenceEquals(blockByProofStmt.Body, assertStmt):
+              change.Update(memberDecl); break;
+            case (AssertWithoutByProofHintChange change, [AssertStmt assertStmt, ..], _):
+              change.Update(memberDecl); break;
+            case (InvariantInitialProofChange change, [AttributedExpression invariant, LoopStmt loopStmt, ..], _) when loopStmt.Invariants.Contains(invariant):
+              change.Update(memberDecl); break;
+            case (BodylessLoopInvariantMaintainProofChange change, [AttributedExpression invariant, OneBodyLoopStmt loopStmt, ..], _) when loopStmt.Invariants.Contains(invariant):
+              change.Update(memberDecl); break;
+            case (OneBodyLoopInvariantMaintainProofChange change, [AttributedExpression invariant, OneBodyLoopStmt loopStmt, ..], _) when loopStmt.Invariants.Contains(invariant):
+              change.Update(memberDecl); break;
+            case (AlternativeLoopInvariantMaintainProofChange change, [AttributedExpression invariant, AlternativeLoopStmt loopStmt, ..], _) when loopStmt.Invariants.Contains(invariant):
+              change.Update(memberDecl); break;
+            case (EnsuresBodylessForallStatementProofHintChange change, [AttributedExpression ensuresClause, ForallStmt forallStmt, ..], _) when forallStmt.Ens.Contains(ensuresClause):
+              change.Update(memberDecl); break;
+            case (EnsuresForallStatementWithBodyProofHintChange change, [AttributedExpression ensuresClause, ForallStmt forallStmt, ..], _) when forallStmt.Ens.Contains(ensuresClause):
+              change.Update(memberDecl); break;
+            case (EnsuresOpaqueBlockProofHintChange change, [AttributedExpression ensuresClause, OpaqueBlock opaqueBlock, ..], _) when opaqueBlock.Ensures.Contains(ensuresClause):
+              change.Update(memberDecl); break;
+            case (FunctionEnsuresProofHintChange change, [AttributedExpression ensuresClause], Function function) when function.Ens.Contains(ensuresClause):
+              change.Update(function); break;
+            case (BodylessMethodOrConstructorEnsuresProofHintChange change, [AttributedExpression ensuresClause], MethodOrConstructor methodOrConstructor) when methodOrConstructor.Ens.Contains(ensuresClause):
+              change.Update(methodOrConstructor); break;
+            case (MethodOrConstructorWithBodyEnsuresProofHintChange change, [AttributedExpression ensuresClause], MethodOrConstructor methodOrConstructor) when methodOrConstructor.Ens.Contains(ensuresClause):
+              change.Update(methodOrConstructor); break;
+            default: throw new NotImplementedException();
+          }
         }
       }
-      ResetChangedModulesAndMembersLazy();
     }
     private static SortedSet<ProtectToProveApplySuffix> instances { get; set; } = new(Comparer);
     public static IReadOnlySet<ProtectToProveApplySuffix> Instances => instances;
@@ -105,48 +116,74 @@ namespace DafnyCore.IncrementalCompilation {
         (MemberDecl.Value, AttributeBearingDeclarations.ConvertAll(static abd => abd.Value));
     }
     private static Dictionary<ProtectToProveApplySuffix, ChangeContext> ChangeContexts { get; set; } = [];
-    // these change objects can be computed once and updated with relevant information
-    private static Lazy<List<(Change<WF>, Change<ProofHint>)>> changesLazy { get; } = new(() => [.. Instances.Select(i => ChangeContexts[i].Evaluated).Select(cc => (
-      cc.AttributeBearingDeclarations switch {
-        [AssertStmt assertStmt, ..] => new AssertWFChange(cc.MemberDecl, assertStmt) as Change<WF>,
-        [AttributedExpression attributedExpression, ..] => new EnsuresWFChange(cc.MemberDecl, attributedExpression),
-        _ => throw new NotImplementedException(), //IPMTODO: from prior debugging, these were hit
-      },
-      (cc.AttributeBearingDeclarations, cc.MemberDecl) switch {
-        ([AssertStmt assertStmt, BlockByProofStmt blockByProofStmt, ..], _) when ReferenceEquals(blockByProofStmt.Body, assertStmt) => new AssertWithByProofHintChange(cc.MemberDecl, blockByProofStmt) as Change<ProofHint>,
-        ([AssertStmt assertStmt, ..], _) => new AssertWithoutByProofHintChange(cc.MemberDecl, assertStmt),
-        ([AttributedExpression attributedExpression, ..], Function function) => new FunctionEnsuresProofHintChange(function, attributedExpression),
-        ([AttributedExpression attributedExpression, ..], MethodOrConstructor methodOrConstructor) => new MethodOrConstructorEnsuresProofHintChange(methodOrConstructor),
+    // these baseChange objects can be computed once and updated with relevant information
+    private static IEnumerable<Change> changesFromContext(MemberDecl memberDecl, IReadOnlyList<IAttributeBearingDeclaration> declsWithAttributes) {
+      yield return (declsWithAttributes, memberDecl) switch {
+        ([AssertStmt assertStmt, ..], _) => new AssertWFChange(memberDecl, assertStmt),
+        ([AttributedExpression invariant, LoopStmt loopStmt, ..], _) when loopStmt.Invariants.Contains(invariant) => new InvariantWFChange(memberDecl, invariant),
+        ([AttributedExpression ensuresClause, ForallStmt forallStmt, ..], _) when forallStmt.Ens.Contains(ensuresClause) => new EnsuresWFChange(memberDecl, ensuresClause),
+        ([AttributedExpression ensuresClause, OpaqueBlock opaqueBlock, ..], _) when opaqueBlock.Ensures.Contains(ensuresClause) => new EnsuresWFChange(memberDecl, ensuresClause),
+        ([AttributedExpression ensuresClause], MethodOrFunction mof) when mof.Ens.Contains(ensuresClause) => new EnsuresWFChange(memberDecl, ensuresClause),
         (_, _) => throw new NotImplementedException(), //IPMTODO: from prior debugging, these were hit
-      }
-    ))]);
-    public static IEnumerable<(string?, string?)> ChangeTexts {
-      set {
-        var changedModulesNeedToBeReset = false;
-        foreach (var (changePair, (WFText, ProofHintText)) in Changes.Zip(value.ExtendWith(() => (null, null)))) {
-          var prev = (changePair.WF.IsEmptyChange, changePair.ProofHint.IsEmptyChange);
-          changePair.WF.Text = WFText;
-          changePair.ProofHint.Text = ProofHintText;
-          changedModulesNeedToBeReset |= prev != (changePair.WF.IsEmptyChange, changePair.ProofHint.IsEmptyChange);
-        }
-        if (changedModulesNeedToBeReset) { ResetChangedModulesAndMembersLazy(); }
+      };
+      foreach (var change in (declsWithAttributes, memberDecl) switch {
+        ([AssertStmt assertStmt, BlockByProofStmt blockByProofStmt, ..], _) when ReferenceEquals(blockByProofStmt.Body, assertStmt) =>
+          new List<Change> { new AssertWithByProofHintChange(memberDecl, blockByProofStmt) },
+        ([AssertStmt assertStmt, ..], _) => [new AssertWithoutByProofHintChange(memberDecl, assertStmt)],
+        ([AttributedExpression invariant, LoopStmt loopStmt, ..], _) when loopStmt.Invariants.Contains(invariant) => [new InvariantInitialProofChange(memberDecl, loopStmt), ..loopStmt switch {
+          OneBodyLoopStmt { Body: null } oneBodyLoopStmt => new List<Change> { new BodylessLoopInvariantMaintainProofChange(memberDecl, oneBodyLoopStmt) } as IEnumerable<Change>,
+          OneBodyLoopStmt { Body: not null } oneBodyLoopStmt => [new OneBodyLoopInvariantMaintainProofChange(memberDecl, oneBodyLoopStmt)],
+          AlternativeLoopStmt alternativeLoopStmt => alternativeLoopStmt.Alternatives.Select((a, i) => new AlternativeLoopInvariantMaintainProofChange(memberDecl, alternativeLoopStmt, i)),
+          _ => throw new UnreachableException(),
+        }],
+        ([AttributedExpression ensuresClause, ForallStmt forallStmt, ..], _) when forallStmt.Ens.Contains(ensuresClause) => [forallStmt.Body switch {
+          null => new EnsuresBodylessForallStatementProofHintChange(memberDecl, forallStmt),
+          not null => new EnsuresForallStatementWithBodyProofHintChange(memberDecl, forallStmt),
+        }],
+        ([AttributedExpression ensuresClause, OpaqueBlock opaqueBlock, ..], _) when opaqueBlock.Ensures.Contains(ensuresClause) => [new EnsuresOpaqueBlockProofHintChange(memberDecl, opaqueBlock)],
+        ([AttributedExpression ensuresClause], Function function) when function.Ens.Contains(ensuresClause) => [new FunctionEnsuresProofHintChange(function, ensuresClause)],
+        ([AttributedExpression ensuresClause], MethodOrConstructor methodOrConstructor) when methodOrConstructor.Ens.Contains(ensuresClause) => [methodOrConstructor.Body switch {
+          null => new BodylessMethodOrConstructorEnsuresProofHintChange(methodOrConstructor),
+          not null => new MethodOrConstructorWithBodyEnsuresProofHintChange(methodOrConstructor),
+        }],
+        (_, _) => throw new NotImplementedException(), //IPMTODO: from prior debugging, these were hit
+      }) { yield return change; }
+    }
+    public class NoMatch(string text) : Exception($"{text} doesn't match any of the supported changesGrouped imput patterns");
+    public static void ModifyChangesWith(string text) {
+      var matched = Patterns.Parse(text);
+      if (matched is null) { throw new NoMatch(text); }
+      var change = matched.MatchChange();
+      change.Text = matched.Text;
+    }
+    public static void EmptyAllChanges() {
+      foreach (var change in ChangesFlattened) {
+        change.Text = null;
       }
     }
-    public const int ChangeTypesCount = 2;
-    public static IReadOnlyList<(Change<WF> WF, Change<ProofHint> ProofHint)> Changes => changesLazy.Value;
-    private static IEnumerable<Change> ChangesFlattener((Change<WF> WF, Change<ProofHint> ProofHint) changePair) { yield return changePair.WF; yield return changePair.ProofHint; }
-    // since `Changes` are constructed once, `ChangesFlattened` can also be constructed once
-    private static Lazy<IReadOnlyList<Change>> changesFlattened { get; } = new(() => [.. Changes.SelectMany(ChangesFlattener)]);
-    public static IReadOnlyList<Change> ChangesFlattened => changesFlattened.Value;
-    // since computing `changedModulesLazy` depends on many aspects that can change from run to run, the lazy instance needs to be reset when said aspects change
-    private static void ResetChangedModulesAndMembersLazy() {
-      changedModulesLazy = new(() => ChangesFlattened.Where(static c => !c.IsEmptyChange).Select(static c => c.AffectedModuleDecl).ToImmutableHashSet());
-      changedMembersLazy = new(() => ChangesFlattened.Where(static c => !c.IsEmptyChange).OfType<IChangeToMemberDecl>().Select(static c => c.MemberDecl).ToImmutableHashSet());
-    }
-    private static Lazy<IReadOnlySet<ModuleDecl>> changedModulesLazy { get; set; } = new();
-    public static IReadOnlySet<ModuleDecl> ChangedModules => changedModulesLazy.Value;
-    private static Lazy<IReadOnlySet<MemberDecl>> changedMembersLazy { get; set; } = new();
-    public static IReadOnlySet<MemberDecl> ChangedMembers => changedMembersLazy.Value;
+    public static IEnumerable<(Uri Uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range Range, string Text)> AggregatedNonEmptyChanges { get {
+      foreach (var changesGrouped in ChangesFlattened.Where(static c => !c.IsEmptyChange).GroupBy(c => c switch {
+        BodylessLoopInvariantMaintainProofChange imp => imp.Range,
+        EnsuresBodylessForallStatementProofHintChange feph => feph.Range,
+        BodylessMethodOrConstructorEnsuresProofHintChange meph => meph.Range,
+        _ => new object(),
+      })) {
+        yield return (changesGrouped.Key, changesGrouped.First()) switch {
+          (OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, BodylessLoopInvariantMaintainProofChange imp) => (imp.Uri, range, $"{{ {string.Join(' ', changesGrouped.Select(c => c.Text))} }}"),
+          (OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, EnsuresBodylessForallStatementProofHintChange feph) => (feph.Uri, range, $"{{ {string.Join(' ', changesGrouped.Select(c => c.Text))} }}"),
+          (OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, BodylessMethodOrConstructorEnsuresProofHintChange meph) => (meph.Uri, range, $"{{ {string.Join(' ', changesGrouped.Select(c => c.Text))} }}"),
+          // yes, the first three cases could be merged, IPMTODO: see if there's any point in keeping them separate
+          (object _, var onlyChange) => (onlyChange.Uri, onlyChange.Range, onlyChange.Text!),
+        };
+      }
+    } }
+
+    private static Lazy<List<List<Change>>> changesPerEntryPointLazy { get; } = new(() => [.. Instances.Select(i => ChangeContexts[i].Evaluated).Select(cc => changesFromContext(cc.MemberDecl, cc.AttributeBearingDeclarations).ToList())]);
+    public static IReadOnlyList<IReadOnlyList<Change>> ChangesPerEntryPoint => changesPerEntryPointLazy.Value;
+    private static Lazy<IReadOnlyList<Change>> changesFlattenedLazy { get; } = new(() => [.. ChangesPerEntryPoint.SelectMany(i => i)]);
+    public static IEnumerable<Change> ChangesFlattened => changesFlattenedLazy.Value;
+    public static IReadOnlySet<ModuleDecl> ChangedModules => ChangesFlattened.Where(static c => !c.IsEmptyChange).Select(static c => c.AffectedModuleDecl).ToImmutableHashSet();
+    public static IReadOnlySet<MemberDecl> ChangedMembers => ChangesFlattened.Where(static c => !c.IsEmptyChange).OfType<IChangeToMemberDecl>().Select(static c => c.MemberDecl).ToImmutableHashSet();
     protected ProtectToProveApplySuffix(Expression e, Protector protector, ProtectorFunctions.ProtectorFunction protectorFunction) : base(e, protector, protectorFunction) {
       instances.Add(this);
       ChangeContexts[this] = new ChangeContext(protector.MostRecentContext);

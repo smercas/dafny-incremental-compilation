@@ -100,5 +100,5 @@ public class WhileStmt : OneBodyLoopStmt, ICloneable<WhileStmt>, ICanFormat {
   protected WhileStmt(Protector protector, WhileStmt original) : base(protector, original) {
     Guard = original.Guard?.WithProtections(protector);
   }
-  public override WhileStmt WithProtections(Protector protector) => new(protector, this);
+  public override WhileStmt WithProtections(Protector protector) => protector.WithAttributeAdditionalContext(() => new WhileStmt(protector, this));
 }

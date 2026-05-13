@@ -40,7 +40,7 @@ namespace Microsoft.Dafny.IncrementalCompilation.Workspace {
         Logger.LogWarning("couldn't find {} in existing files ({}), will read form disk", uri, URIsAsString);
         return OnDiskFileSystem.Instance.ReadFile(uri);
       }
-      virtual public void ApplyModification(IncCompModifications modification) { throw new InvalidOperationException(); }
+      //virtual public void ApplyModification(IncCompModifications modification) { throw new InvalidOperationException(); }
     }
     class InitialFileSystem(ILogger<FileSystem> logger, IReadOnlyCollection<Uri> files) : BaseFileSystem(logger, files) {
       private FrozenDictionary<Uri, string> Files { get; } = files.Select(uri => KeyValuePair.Create(uri, File.ReadAllText(uri.LocalPath))).ToFrozenDictionary();
@@ -113,16 +113,16 @@ namespace Microsoft.Dafny.IncrementalCompilation.Workspace {
         }
         return ProcessBeforeReturn(builder.ToString());
       }
-      public void ApplyModifications(IncCompModifications modifications) {
-        foreach (var cache in Info.Values.Select(v => v.Cache)) { cache.Value = null!; }
-        foreach (var uri in Info.Keys) {
-          if (false) {
-            // take modification from `modifications[uri]`
-          } else {
-            Info[uri].Modifications.Value = null!;
-          }
-        }
-      }
+      //public void ApplyModifications(IncCompModifications modifications) {
+      //  foreach (var cache in Info.Values.Select(v => v.Cache)) { cache.Value = null!; }
+      //  foreach (var uri in Info.Keys) {
+      //    if (false) {
+      //      // take modification from `modifications[uri]`
+      //    } else {
+      //      Info[uri].Modifications.Value = null!;
+      //    }
+      //  }
+      //}
     }
     private class Entry(TextBuffer buffer, int? version) {
       public TextBuffer Buffer { get; set; } = buffer;
@@ -135,10 +135,6 @@ namespace Microsoft.Dafny.IncrementalCompilation.Workspace {
       Contract.Assert(Contract.ForAll(files, file => File.Exists(file.LocalPath)));
       this.logger = logger;
       this.originalFiles = files.Select(uri => KeyValuePair.Create(uri, new Entry(new(File.ReadAllText(uri.LocalPath)), null))).ToFrozenDictionary();
-    }
-
-    public void ApplyModification(IncCompModifications modification) {
-      //IPMTODO: this and the changes system at large
     }
 
     public FileSnapshot ReadFile(Uri uri) {

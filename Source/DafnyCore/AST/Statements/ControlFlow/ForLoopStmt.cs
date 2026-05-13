@@ -123,5 +123,5 @@ public class ForLoopStmt : OneBodyLoopStmt, ICloneable<ForLoopStmt>, ICanFormat 
     End = original.End?.WithProtections(protector);
     GoingUp = original.GoingUp;
   }
-  public override ForLoopStmt WithProtections(Protector protector) => new(protector, this);
+  public override ForLoopStmt WithProtections(Protector protector) => protector.WithAttributeAdditionalContext(() => new ForLoopStmt(protector, this));
 }

@@ -66,13 +66,5 @@ namespace Microsoft.Dafny.IncrementalCompilation {
         .AddSingleton<ITextDocumentLoader, TextDocumentLoader>()
         .AddSingleton<TelemetryPublisherBase, IncrementalCompilationTelemetryPublisher>();
     }
-
-    // IPMTODO: change to property when updating to C#14
-    // IPMTODO: modifications are different now, treat stuff accordingly
-    public static IncCompModifications? Modification(this DafnyOptions dafnyOptions) => null; // IPMTODO: port to new change interface
-    //(dafnyOptions.Get(DafnyLangSymbolResolver.CachingType) as DafnyLangSymbolResolver.CachingMode.Incremental)!.modifications;
-    public static void Modification(this DafnyOptions dafnyOptions, IncCompModifications? modification) { }
-    //dafnyOptions.Set(DafnyLangSymbolResolver.CachingType, new DafnyLangSymbolResolver.CachingMode.Incremental(modification));
-
   }
 }

@@ -22,10 +22,10 @@ public delegate ProjectManager CreateProjectManager(
 
 public class ProjectManager : IDisposable {
   private readonly DafnyOptions options;
-  public IncCompModifications? Modification {
-    get => options.Modification();
-    set => options.Modification(value);
-  }
+  //public IncCompModifications? Modification {
+  //  get => options.Modification();
+  //  set => options.Modification(value);
+  //}
   public DafnyProject Project => options.DafnyProject;
   private Compilation compilation;
   public Compilation Compilation {
@@ -84,7 +84,7 @@ public class ProjectManager : IDisposable {
         yield return member;
       }
     }
-    
+
     foreach (var decl in def.SourceDecls) {
       switch (decl) {
         case LiteralModuleDecl { ModuleDef: var submodule }:
@@ -159,16 +159,16 @@ public class ProjectManager : IDisposable {
     this.logger = logger;
     scheduler = CustomStackSizePoolTaskScheduler.Create(stackSize, options.VcsCores);
     this.createCompilation = (input) => createCompilation(BoogieExecutionEngine, input ?? new CompilationInput(options, version, Project));
-    Modification = null;
+    //Modification = null;
     compilation = this.createCompilation();
     Compilation.Start();
     // collect entry points here in a id to entry point mapping
   }
 
-  public void ApplyModification(IncCompModifications modification) {
-    Modification = modification;
-    StartNewCompilation();
-  }
+  //public void ApplyModification(IncCompModifications modification) {
+  //  Modification = modification;
+  //  StartNewCompilation();
+  //}
 
   public void StartNewCompilation() {
     //version += 1;

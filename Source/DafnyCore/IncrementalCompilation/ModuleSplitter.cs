@@ -101,32 +101,34 @@ namespace DafnyCore.IncrementalCompilation {
           new_member.NameNode = $"{Constants.Name}_{new_member.NameNode}".ToNameNodeWithVirtualToken();
           switch (EnclosingDecl) {
             case DefaultClassDecl: {
-              new_member.EnclosingClass = new_decl.ModuleDef.DefaultClass!;
-              new_decl.ModuleDef.DefaultClass!.Members.Add(new_member);
-              AlterOriginalMemberDecl();
-              new_decl.ModuleDef.DefaultClass!.SetMembersBeforeResolution();
-            } break;
+                new_member.EnclosingClass = new_decl.ModuleDef.DefaultClass!;
+                new_decl.ModuleDef.DefaultClass!.Members.Add(new_member);
+                AlterOriginalMemberDecl();
+                new_decl.ModuleDef.DefaultClass!.SetMembersBeforeResolution();
+              }
+              break;
             case ClassDecl or TraitDecl or DatatypeDecl or NewtypeDecl or AbstractTypeDecl: {
-              TopLevelDecl new_enclosing_class = EnclosingDecl switch {
-                ClassDecl => new ClassDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), null, [.. EnclosingDecl.TypeArgs], new_decl.ModuleDef, [new_member], [], true),
-                TraitDecl => new TraitDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [new_member], null, true, []),
-                DatatypeDecl => EnclosingDecl switch {
-                  CoDatatypeDecl => new CoDatatypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [], [], [new_member], null, true),
-                  IndDatatypeDecl indDatatypeDecl => indDatatypeDecl switch {
-                    TupleTypeDecl => throw new UnreachableException("`TupleTypeDecl` should only be present in the `System` module"),
-                    _ when indDatatypeDecl.IsExactly() => new IndDatatypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [], [], [new_member], null, true),
+                TopLevelDecl new_enclosing_class = EnclosingDecl switch {
+                  ClassDecl => new ClassDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), null, [.. EnclosingDecl.TypeArgs], new_decl.ModuleDef, [new_member], [], true),
+                  TraitDecl => new TraitDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [new_member], null, true, []),
+                  DatatypeDecl => EnclosingDecl switch {
+                    CoDatatypeDecl => new CoDatatypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [], [], [new_member], null, true),
+                    IndDatatypeDecl indDatatypeDecl => indDatatypeDecl switch {
+                      TupleTypeDecl => throw new UnreachableException("`TupleTypeDecl` should only be present in the `System` module"),
+                      _ when indDatatypeDecl.IsExactly() => new IndDatatypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, [.. EnclosingDecl.TypeArgs], [], [], [new_member], null, true),
+                      _ => throw new UnreachableException(),
+                    },
                     _ => throw new UnreachableException(),
                   },
+                  NewtypeDecl => new NewtypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), [.. EnclosingDecl.TypeArgs], new_decl.ModuleDef, null, SubsetTypeDecl.WKind.CompiledZero, null, [], [new_member], null, true),
+                  AbstractTypeDecl { Characteristics: var characteristics } => new AbstractTypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, new TypeParameterCharacteristics(characteristics.EqualitySupport, characteristics.AutoInit, characteristics.ContainsNoReferenceTypes) { SourceOrigin = characteristics.SourceOrigin }, [.. EnclosingDecl.TypeArgs], [], [new_member], null, true),
                   _ => throw new UnreachableException(),
-                },
-                NewtypeDecl => new NewtypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), [.. EnclosingDecl.TypeArgs], new_decl.ModuleDef, null, SubsetTypeDecl.WKind.CompiledZero, null, [], [new_member], null, true),
-                AbstractTypeDecl { Characteristics: var characteristics } => new AbstractTypeDecl(EnclosingDecl.Origin, EnclosingDecl.NameNode.Clone(new()), new_decl.ModuleDef, new TypeParameterCharacteristics(characteristics.EqualitySupport, characteristics.AutoInit, characteristics.ContainsNoReferenceTypes) { SourceOrigin = characteristics.SourceOrigin }, [.. EnclosingDecl.TypeArgs], [], [new_member], null, true),
-                _ => throw new UnreachableException(),
-              };
-              new_member.EnclosingClass = new_enclosing_class;
-              new_decl.ModuleDef.SourceDecls.Add(new_enclosing_class);
-              AlterOriginalMemberDecl();
-            } break;
+                };
+                new_member.EnclosingClass = new_enclosing_class;
+                new_decl.ModuleDef.SourceDecls.Add(new_enclosing_class);
+                AlterOriginalMemberDecl();
+              }
+              break;
 
           }
           return new_decl;
@@ -230,12 +232,11 @@ namespace DafnyCore.IncrementalCompilation {
           case Field: break;
           case MethodOrFunction m_or_f:
             switch (m_or_f) {
-              case Microsoft.Dafny.Function { Body: not null } f
+              case Microsoft.Dafny.Function f
                   when ContainingEitherOfAttrs(f, Constants.AttributeName).ToImmutableHashSet() is var attributeBearing && !attributeBearing.IsEmpty:
                 yield return new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, f, attributeBearing);
                 break;
-              case Microsoft.Dafny.Function: break;
-              case MethodOrConstructor { Body: not null } m_or_c when
+              case MethodOrConstructor m_or_c when
                   ContainingEitherOfAttrs(m_or_c, Constants.AttributeName).ToImmutableHashSet() is var attributeBearing && !attributeBearing.IsEmpty:
                 yield return m_or_c switch {
                   Method m => new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, m, attributeBearing),
@@ -243,7 +244,6 @@ namespace DafnyCore.IncrementalCompilation {
                   _ => throw new UnreachableException(),
                 };
                 break;
-              case MethodOrConstructor: break;
               default: throw new UnreachableException();
             }
             break;
@@ -258,12 +258,14 @@ namespace DafnyCore.IncrementalCompilation {
 
     // only produces accessors considering the attributes of `AttributedExpression`, disregarding appearances in `ae.E`
     public static IEnumerable<AttributesAccessor> ContainingEitherOfAttrs(AttributedExpression ae, params string[] attrs) => PresentIn(ae.Attributes, attrs).Select(attr => new AttributesAccessor(ae, attr));
-    
+
     // if s is an AssertStmt, this only produces accessors considering the attributes of said `AssertStatement`, disregarding appearances in `assertStmt.Expr`
     // if s is a LoopStmt, this only produces accessors considering the attributes of its invariants, disregarding appearances in decreases + modifies clauses and whatever body it could have
     public static IEnumerable<AttributesAccessor> ContainingEitherOfAttrs(Statement s, params string[] attrs) => s switch {
       AssertStmt assertStmt => PresentIn(assertStmt.Attributes, attrs).Select(attr => new AttributesAccessor(assertStmt, attr)),
       LoopStmt loopStmt => loopStmt.Invariants.SelectMany(ae => ContainingEitherOfAttrs(ae, attrs)),
+      ForallStmt forallStmt => forallStmt.Ens.SelectMany(ae => ContainingEitherOfAttrs(ae, attrs)),
+      OpaqueBlock opaqueBlock => opaqueBlock.Ensures.SelectMany(ae => ContainingEitherOfAttrs(ae, attrs)),
       _ => [],
     };
 
@@ -281,8 +283,8 @@ namespace DafnyCore.IncrementalCompilation {
             m_or_f.Decreases.Expressions ?? []
           ).SelectMany(static e => e.PreResolveRecursiveSubStatements()),
           m_or_f switch {
-            MethodOrConstructor { Body: not null } m_or_c => m_or_c.Body.PreResolveRecursiveSubStatements(),
-            Microsoft.Dafny.Function { Body: not null } f => f.Body.PreResolveRecursiveSubStatements(),
+            MethodOrConstructor m_or_c => m_or_c.Body?.PreResolveRecursiveSubStatements() ?? [],
+            Microsoft.Dafny.Function f => f.Body?.PreResolveRecursiveSubStatements() ?? [],
             _ => throw new UnreachableException(),
           }
         ).SelectMany(s => ContainingEitherOfAttrs(s, attrs))

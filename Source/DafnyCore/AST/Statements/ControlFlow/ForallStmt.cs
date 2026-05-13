@@ -197,5 +197,5 @@ public class ForallStmt : Statement, ICloneable<ForallStmt>, ICanFormat {
       _ => throw new UnreachableException("constructor usage indicates that this can only be null or a `BlockStmt`"),
     }).WithProtections(protector, original.BoundVars.Select(bv => bv.ToProtectAssertion()));
   }
-  public override ForallStmt WithProtections(Protector protector) => new(protector, this);
+  public override ForallStmt WithProtections(Protector protector) => protector.WithAttributeAdditionalContext(() => new ForallStmt(protector, this));
 }
