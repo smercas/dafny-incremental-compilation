@@ -40,7 +40,7 @@ public class NestedMatchCaseExpr : NestedMatchCase, IAttributeBearingDeclaration
     if (beforeResolveErrorCount == afterResolveErrorCount) {
       if (PrependedProtectionsCount > 0) {
         Contract.Assert(Body is StmtExpr);
-        Body = (Body as StmtExpr)!.Where(s => ProtectionFilter(resolver, s));
+        Body = (Body as StmtExpr)!.Where((s, i) => !(i < PrependedProtectionsCount) || ProtectionFilter(resolver, s));
       }
       resolver.ResolveExpression(Body, resolutionContext);
       resolver.ConstrainSubtypeRelation(resultType, Body.Type, Body.Origin, "type of case bodies do not agree (found {0}, previous types {1})", Body.Type, resultType);

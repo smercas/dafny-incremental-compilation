@@ -1,6 +1,7 @@
 using DafnyCore.IncrementalCompilation;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using System.Linq;
 
 namespace Microsoft.Dafny;
 
@@ -95,13 +96,17 @@ public class StmtExpr : Expression, ICanFormat, ICloneable<StmtExpr> {
   }
   public override StmtExpr WithProtections(Protector protector) => new(protector, this);
 
-  public Expression Where(System.Func<Statement, bool> predicate) {
-    var cloner = new Cloner();
-    var filteredTail = E switch {
-      StmtExpr se => se.Where(predicate),
-      _ => cloner.CloneExpr(E),
-    };
-    if (!predicate(S)) { return filteredTail; }
-    return new StmtExpr(cloner.Origin(Origin), cloner.CloneStmt(S, false), filteredTail);
+  public Expression Where(System.Func<Statement, bool> predicate) => Where((e, _) => predicate(e));
+  public Expression Where(System.Func<Statement, int, bool> predicate) {
+    static Expression WhereHelper(StmtExpr se, System.Func<Statement, int, bool> predicate, int depth = 0) {
+      var cloner = new Cloner();
+      var filteredTail = se.E switch {
+        StmtExpr inner => WhereHelper(inner, predicate, depth + 1),
+        _ => cloner.CloneExpr(se.E),
+      };
+      if (!predicate(se.S, depth)) { return filteredTail; }
+      return new StmtExpr(cloner.Origin(se.Origin), cloner.CloneStmt(se.S, false), filteredTail);
+    }
+    return WhereHelper(this, predicate, 0);
   }
 }
