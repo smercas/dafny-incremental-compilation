@@ -35,7 +35,7 @@ namespace DafnyCore.IncrementalCompilation {
       switch (s) {
         case VarDeclStmt { Assign.Lhss: var newvars }:
           foreach (var newvar in newvars) {
-            yield return newvar.WithProtections(protector).ToProtectAssertion();
+            yield return protector.Clone(newvar).ToProtectAssertion();
           }
           break;
         case VarDeclPattern { LocalVars: var unfiltered }:

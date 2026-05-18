@@ -50,7 +50,8 @@ public static class ProtectorFunctions {
           signature: (
             ("x", typeVar).ToFormal(), [
             ("name", StringType()).ToFormal(),
-            ], typeVar.ToType())
+            ]
+          )
         );
       }
       public override Function Function { get; } = functionFrom("_oldProtect");
@@ -97,7 +98,8 @@ public static class ProtectorFunctions {
             ("name", StringType()).ToFormal(),
               ("scope", new SeqType(new BoolType())).ToFormal(),
               ("id", new IntType()).ToFormal(),
-            ], typeVar.ToType())
+            ]
+          )
         );
       }
       public override Function Function { get; } = functionFrom("_protectToProve");
@@ -107,16 +109,16 @@ public static class ProtectorFunctions {
     }
     public sealed class ProtectToProveInv : ProtectorFunction, IChangeContextDependant {
       private static Function functionFrom(string name) {
-        var typeVar = "T".ToTypeParameter();
         return IdentityOf(
-          typeArgs: [typeVar,],
+          typeArgs: [],
           name: name,
           signature: (
-            ("x", typeVar).ToFormal(), [
+            ("x", new BoolType()).ToFormal(), [
             ("name", StringType()).ToFormal(),
               ("scope", new SeqType(new BoolType())).ToFormal(),
               ("id", new IntType()).ToFormal(),
-            ], typeVar.ToType())
+            ]
+          )
         );
       }
       public override Function Function { get; } = functionFrom("_protectToProveInv");
@@ -135,7 +137,8 @@ public static class ProtectorFunctions {
             ("name", StringType()).ToFormal(),
               ("scope", new SeqType(new BoolType())).ToFormal(),
               ("id", new IntType()).ToFormal(),
-            ], typeVar.ToType())
+            ]
+          )
         );
       }
       public override Function Function { get; } = functionFrom("_protectToProveImmediate");
@@ -145,16 +148,16 @@ public static class ProtectorFunctions {
     }
     public sealed class ProtectToProveWF : ProtectorFunction {
       private static Function functionFrom(string name) {
-        var typeVar = "T".ToTypeParameter();
         return IdentityOf(
-          typeArgs: [typeVar,],
+          typeArgs: [],
           name: name,
           signature: (
-            ("x", typeVar).ToFormal(), [
+            ("x", new BoolType()).ToFormal(), [
             ("name", StringType()).ToFormal(),
               ("scope", new SeqType(new BoolType())).ToFormal(),
               ("id", new IntType()).ToFormal(),
-            ], typeVar.ToType())
+            ]
+          )
         );
       }
       public override Function Function { get; } = functionFrom("_protectToProveWF");
@@ -169,9 +172,34 @@ public static class ProtectorFunctions {
           (etran.TranslateString(desc.GetAssertedExpr(options).ToString()), resolvedProtectToProveExpr.Args[1].Type),
           .. resolvedProtectToProveExpr.Args.Skip(2).Select(a => (etran.TrExpr(a.Resolved), a.Type))];
         return etran.BoogieGenerator.CondApplyUnbox(tok, new Microsoft.Boogie.NAryExpr(tok, new Microsoft.Boogie.FunctionCall(new Microsoft.Boogie.IdentifierExpr(tok, Function.FullSanitizedName, Microsoft.Boogie.Type.Bool)), [
-          etran.BoogieGenerator.TypeToTy(Type.Bool),
           etran.BoogieGenerator.GetRevealConstant(Function),
-          .. args.Zip(resolvedProtectToProveExpr.Function.Ins.Select(i => i.Type)).Select(a => etran.BoogieGenerator.AdaptBoxing(tok, a.First.e, a.First.dt, a.Second)),
+          .. args.Zip(Function.Ins.Select(i => i.Type)).Select(a => etran.BoogieGenerator.AdaptBoxing(tok, a.First.e, a.First.dt, a.Second)),
+        ]), Function.ResultType, Type.Bool);
+      }
+    }
+    public sealed class ProtectFinishedInv : ProtectorFunction {
+      private static Function functionFrom(string name) {
+        return IdentityOf(
+          typeArgs: [],
+          name: name,
+          signature: (
+            ("x", new BoolType()).ToFormal(), [
+            ("name", StringType()).ToFormal(),
+              ("scope", new SeqType(new BoolType())).ToFormal(),
+              ("id", new IntType()).ToFormal(),
+            ]
+          )
+        );
+      }
+      public override Function Function { get; } = functionFrom("_protectFinishedInv");
+
+      public Microsoft.Boogie.Expr InvocationFrom(ProtectToProveApplySuffix protectToProveInvExpr, ExpressionTranslator etran) {
+        var resolvedProtectToProveInvExpr = (protectToProveInvExpr.ResolvedExpression as FunctionCallExpr)!;
+        var tok = resolvedProtectToProveInvExpr.Origin;
+        List<(Microsoft.Boogie.Expr e, Type dt)> args = [.. resolvedProtectToProveInvExpr.Args.Select(a => (etran.TrExpr(a.Resolved), a.Type))];
+        return etran.BoogieGenerator.CondApplyUnbox(tok, new Microsoft.Boogie.NAryExpr(tok, new Microsoft.Boogie.FunctionCall(new Microsoft.Boogie.IdentifierExpr(tok, Function.FullSanitizedName, Microsoft.Boogie.Type.Bool)), [
+          etran.BoogieGenerator.GetRevealConstant(Function),
+          .. args.Zip(Function.Ins.Select(i => i.Type)).Select(a => etran.BoogieGenerator.AdaptBoxing(tok, a.First.e, a.First.dt, a.Second)),
         ]), Function.ResultType, Type.Bool);
       }
     }
@@ -184,7 +212,8 @@ public static class ProtectorFunctions {
   public static ProtectorFunction.ProtectToProveInv ProtectToProveInv { get; } = new();
   public static ProtectorFunction.ProtectToProveImmediate ProtectToProveImmediate { get; } = new();
   public static ProtectorFunction.ProtectToProveWF ProtectToProveWF { get; } = new();
-  public static ICollection<ProtectorFunction> All { get; } = [NewProtect, OldProtect, ProtectScope, ProtectToProve, ProtectToProveInv, ProtectToProveImmediate, ProtectToProveWF];
+  public static ProtectorFunction.ProtectFinishedInv ProtectFinishedInv { get; } = new();
+  public static ICollection<ProtectorFunction> All { get; } = [NewProtect, OldProtect, ProtectScope, ProtectToProve, ProtectToProveInv, ProtectToProveImmediate, ProtectToProveWF, ProtectFinishedInv];
   public static string ContainingModuleName { get; } = "_protectors";
 
   private static Function ProtectorFunctionBase(List<TypeParameter> typeArgs, string name, (List<Formal> args, Microsoft.Dafny.Type result) signature, Expression body) => new(
@@ -213,14 +242,14 @@ public static class ProtectorFunctions {
     signatureEllipsis: null
   );
 
-  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (Formal identity, Microsoft.Dafny.Type result) signature) =>
-    IdentityOf(typeArgs, name, ([], signature.identity, [], signature.result));
-  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<Formal> beforeIdentity, Formal identity, Microsoft.Dafny.Type result) signature) =>
-    IdentityOf(typeArgs, name, (signature.beforeIdentity, signature.identity, [], signature.result));
-  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (Formal identity, List<Formal> afterIdentity, Microsoft.Dafny.Type result) signature) =>
-    IdentityOf(typeArgs, name, ([], signature.identity, signature.afterIdentity, signature.result));
-  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<Formal> beforeIdentity, Formal identity, List<Formal> afterIdentity, Microsoft.Dafny.Type result) signature) =>
-    ProtectorFunctionBase(typeArgs, name, ([.. signature.beforeIdentity, signature.identity, .. signature.afterIdentity,], signature.result), signature.identity.Name.ToFunctionBody());
+  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, Formal identity) =>
+    IdentityOf(typeArgs, name, ([], identity, []));
+  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<Formal> beforeIdentity, Formal identity) signature) =>
+    IdentityOf(typeArgs, name, (signature.beforeIdentity, signature.identity, []));
+  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (Formal identity, List<Formal> afterIdentity) signature) =>
+    IdentityOf(typeArgs, name, ([], signature.identity, signature.afterIdentity));
+  private static Function IdentityOf(List<TypeParameter> typeArgs, string name, (List<Formal> beforeIdentity, Formal identity, List<Formal> afterIdentity) signature) =>
+    ProtectorFunctionBase(typeArgs, name, ([.. signature.beforeIdentity, signature.identity, .. signature.afterIdentity,], signature.identity.Type), signature.identity.Name.ToFunctionBody());
 
   private static Type StringType() => new UserDefinedType(origin: SourceOrigin.NoToken, name: "string", optTypeArgs: null);
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using DafnyCore.IncrementalCompilation;
 using DafnyCore.Verifier;
 using Microsoft.Boogie;
 using Bpl = Microsoft.Boogie;
@@ -407,6 +408,10 @@ public partial class BoogieGenerator {
 
     Bpl.StmtList body = loopBodyBuilder.Collect(loop.Origin);
     builder.Add(new Bpl.WhileCmd(loop.Origin, Bpl.Expr.True, invariants, [], body));
+    foreach (var invariant in loop.Invariants) {
+      if (invariant.E is not ProtectToProveApplySuffix protectedInvExpr) { continue; }
+      builder.Add(TrAssertCmd(protectedInvExpr.Origin, ProtectorFunctions.ProtectFinishedInv.InvocationFrom(protectedInvExpr, etran)));
+    }
   }
 
   // Return the version of e that holds at the beginnging of the loop,
