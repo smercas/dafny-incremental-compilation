@@ -131,20 +131,20 @@ namespace DafnyCore.IncrementalCompilation {
           new List<Change> { new AssertWithByProofHintChange(memberDecl, blockByProofStmt) },
         ([AssertStmt assertStmt, ..], _) => [new AssertWithoutByProofHintChange(memberDecl, assertStmt)],
         ([AttributedExpression invariant, LoopStmt loopStmt, ..], _) when loopStmt.Invariants.Contains(invariant) => [new InvariantInitialProofChange(memberDecl, loopStmt), ..loopStmt switch {
-          OneBodyLoopStmt { Body: null } oneBodyLoopStmt => new List<Change> { new BodylessLoopInvariantMaintainProofChange(memberDecl, oneBodyLoopStmt) } as IEnumerable<Change>,
-          OneBodyLoopStmt { Body: not null } oneBodyLoopStmt => [new OneBodyLoopInvariantMaintainProofChange(memberDecl, oneBodyLoopStmt)],
+          OneBodyLoopStmt { Body: var body } oneBodyLoopStmt when Change.IsEmptyBody(body) => new List<Change> { new BodylessLoopInvariantMaintainProofChange(memberDecl, oneBodyLoopStmt) } as IEnumerable<Change>,
+          OneBodyLoopStmt { Body: var body } oneBodyLoopStmt when !Change.IsEmptyBody(body) => [new OneBodyLoopInvariantMaintainProofChange(memberDecl, oneBodyLoopStmt)],
           AlternativeLoopStmt alternativeLoopStmt => alternativeLoopStmt.Alternatives.Select((a, i) => new AlternativeLoopInvariantMaintainProofChange(memberDecl, alternativeLoopStmt, i)),
           _ => throw new UnreachableException(),
         }],
         ([AttributedExpression ensuresClause, ForallStmt forallStmt, ..], _) when forallStmt.Ens.Contains(ensuresClause) => [forallStmt.Body switch {
-          null => new EnsuresBodylessForallStatementProofHintChange(memberDecl, forallStmt),
-          not null => new EnsuresForallStatementWithBodyProofHintChange(memberDecl, forallStmt),
+          var body when Change.IsEmptyBody(body) => new EnsuresBodylessForallStatementProofHintChange(memberDecl, forallStmt),
+          var body when !Change.IsEmptyBody(body) => new EnsuresForallStatementWithBodyProofHintChange(memberDecl, forallStmt),
         }],
         ([AttributedExpression ensuresClause, OpaqueBlock opaqueBlock, ..], _) when opaqueBlock.Ensures.Contains(ensuresClause) => [new EnsuresOpaqueBlockProofHintChange(memberDecl, opaqueBlock)],
         ([AttributedExpression ensuresClause], Function function) when function.Ens.Contains(ensuresClause) => [new FunctionEnsuresProofHintChange(function, ensuresClause)],
         ([AttributedExpression ensuresClause], MethodOrConstructor methodOrConstructor) when methodOrConstructor.Ens.Contains(ensuresClause) => [methodOrConstructor.Body switch {
-          null => new BodylessMethodOrConstructorEnsuresProofHintChange(methodOrConstructor),
-          not null => new MethodOrConstructorWithBodyEnsuresProofHintChange(methodOrConstructor),
+          var body when Change.IsEmptyBody(body) => new BodylessMethodOrConstructorEnsuresProofHintChange(methodOrConstructor),
+          var body when !Change.IsEmptyBody(body) => new MethodOrConstructorWithBodyEnsuresProofHintChange(methodOrConstructor),
         }],
         (_, _) => throw new NotImplementedException(), //IPMTODO: from prior debugging, these were hit
       }) { yield return change; }

@@ -38,7 +38,7 @@ namespace DafnyCore.IncrementalCompilation {
     public Protector() { Cloner = new(); }
 
     #region cloning
-    public IOrigin Clone(IOrigin o) => Cloner.Origin(o);
+    public IOrigin Clone(IOrigin o) => o == SourceOrigin.TokenForGeneratedLoopBody ? o : Cloner.Origin(o);
     [return: NotNullIfNotNull(nameof(a))] public Attributes? Clone(Attributes? a) => Cloner.CloneAttributes(a);
     [return: NotNullIfNotNull(nameof(t))] public Microsoft.Dafny.Type? Clone(Microsoft.Dafny.Type? t) => Cloner.CloneType(t);
     [return: NotNullIfNotNull(nameof(tp))] public TypeParameter? Clone(TypeParameter? tp) => Cloner.CloneTypeParam(tp);

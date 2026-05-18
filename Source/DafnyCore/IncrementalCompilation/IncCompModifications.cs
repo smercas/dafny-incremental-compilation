@@ -156,6 +156,8 @@ public abstract class Change(Uri uri, Range range) {
     //return l.Origin.col.CompareTo(r.Origin.col);
   });
 
+  public static bool IsEmptyBody(Statement? s) => s is null || ReferenceEquals(s.Origin, SourceOrigin.TokenForGeneratedLoopBody);
+
   public Uri Uri { get; } = uri;
   public abstract ModuleDecl AffectedModuleDecl { get; }
   public Range Range { get; } = range;
@@ -188,11 +190,11 @@ public abstract class EnsuresMethodOrConstructorOrFunctionProofHintChange<MOF>(M
   where MOF : MethodOrFunction;
 public class MethodOrConstructorWithBodyEnsuresProofHintChange(MethodOrConstructor methodOrConstructor) :
   EnsuresMethodOrConstructorOrFunctionProofHintChange<MethodOrConstructor>(methodOrConstructor, RangeFor(methodOrConstructor)) {
-  private static Range RangeFor(MethodOrConstructor methodOrConstructor) => RangeFor(methodOrConstructor.Body?.EndToken ?? throw new UnreachableException($"method is meant to have a body, use {typeof(BodylessMethodOrConstructorEnsuresProofHintChange).Name} instead"));
+  private static Range RangeFor(MethodOrConstructor methodOrConstructor) => RangeFor(!IsEmptyBody(methodOrConstructor.Body) ? methodOrConstructor.Body!.EndToken : throw new UnreachableException($"method is meant to have a body, use {typeof(BodylessMethodOrConstructorEnsuresProofHintChange).Name} instead"));
 }
 public class BodylessMethodOrConstructorEnsuresProofHintChange(MethodOrConstructor methodOrConstructor) :
   EnsuresMethodOrConstructorOrFunctionProofHintChange<MethodOrConstructor>(methodOrConstructor, RangeFor(methodOrConstructor)) {
-  private static Range RangeFor(MethodOrConstructor methodOrConstructor) => RangeFor(methodOrConstructor.Body is null ? methodOrConstructor.EndToken.Next : throw new UnreachableException($"method is meant to not have a body, use {typeof(MethodOrConstructorWithBodyEnsuresProofHintChange).Name} instead"));
+  private static Range RangeFor(MethodOrConstructor methodOrConstructor) => RangeFor(IsEmptyBody(methodOrConstructor.Body) ? methodOrConstructor.EndToken.Next : throw new UnreachableException($"method is meant to not have a body, use {typeof(MethodOrConstructorWithBodyEnsuresProofHintChange).Name} instead"));
 }
 
 public abstract class EnsuresStatementProofHintChange(MemberDecl memberDecl, Range range) :
@@ -202,11 +204,11 @@ public abstract class EnsuresForallStatementProofHintChange(MemberDecl memberDec
   EnsuresStatementProofHintChange(memberDecl, range), IProofHint;
 public class EnsuresForallStatementWithBodyProofHintChange(MemberDecl memberDecl, ForallStmt containingStmt) :
   EnsuresForallStatementProofHintChange(memberDecl, RangeFor(containingStmt)) {
-  private static Range RangeFor(ForallStmt containingStmt) => RangeFor(containingStmt.Body?.EndToken ?? throw new UnreachableException($"forall statement is meant to have a body, use {typeof(EnsuresBodylessForallStatementProofHintChange).Name} instead")); // IPMTODO: check if this is ok
+  private static Range RangeFor(ForallStmt containingStmt) => RangeFor(!IsEmptyBody(containingStmt.Body) ? containingStmt.Body!.EndToken : throw new UnreachableException($"forall statement is meant to have a body, use {typeof(EnsuresBodylessForallStatementProofHintChange).Name} instead")); // IPMTODO: check if this is ok
 }
 public class EnsuresBodylessForallStatementProofHintChange(MemberDecl memberDecl, ForallStmt containingStmt) :
   EnsuresForallStatementProofHintChange(memberDecl, RangeFor(containingStmt)) {
-  private static Range RangeFor(ForallStmt containingStmt) => RangeFor(containingStmt.Body is null ? containingStmt.EndToken.Next : throw new UnreachableException($"forall statement is meant to not have a body, use {typeof(EnsuresForallStatementWithBodyProofHintChange).Name} instead")); // IPMTODO: check if this is ok
+  private static Range RangeFor(ForallStmt containingStmt) => RangeFor(IsEmptyBody(containingStmt.Body) ? containingStmt.EndToken.Next : throw new UnreachableException($"forall statement is meant to not have a body, use {typeof(EnsuresForallStatementWithBodyProofHintChange).Name} instead")); // IPMTODO: check if this is ok
 }
 public class EnsuresOpaqueBlockProofHintChange(MemberDecl memberDecl, OpaqueBlock containingStmt) :
   EnsuresStatementProofHintChange(memberDecl, RangeFor(containingStmt)), IProofHint {
@@ -243,12 +245,12 @@ public class AlternativeLoopInvariantMaintainProofChange(MemberDecl memberDecl, 
 // the loop body needs to be nonEmpty aka `loopStmt.Body is not null`
 public class OneBodyLoopInvariantMaintainProofChange(MemberDecl memberDecl, OneBodyLoopStmt loopStmt) :
   InvariantMaintainProofChange(memberDecl, RangeFor(loopStmt)) {
-  private static Range RangeFor(OneBodyLoopStmt loopStmt) => RangeFor(loopStmt.Body?.EndToken ?? throw new UnreachableException($"loop statement is meant to have a body, use {typeof(BodylessLoopInvariantMaintainProofChange).Name} instead"));
+  private static Range RangeFor(OneBodyLoopStmt loopStmt) => RangeFor(!IsEmptyBody(loopStmt.Body) ? loopStmt.Body!.EndToken : throw new UnreachableException($"loop statement is meant to have a body, use {typeof(BodylessLoopInvariantMaintainProofChange).Name} instead"));
 }
 
 public class BodylessLoopInvariantMaintainProofChange(MemberDecl memberDecl, OneBodyLoopStmt loopStmt) :
   InvariantMaintainProofChange(memberDecl, RangeFor(loopStmt)) {
-  private static Range RangeFor(OneBodyLoopStmt loopStmt) => RangeFor(loopStmt.Body is null ? loopStmt.EndToken.Next : throw new UnreachableException($"loop statement is meant to not have a body, use {typeof(OneBodyLoopInvariantMaintainProofChange).Name} instead"));
+  private static Range RangeFor(OneBodyLoopStmt loopStmt) => RangeFor(IsEmptyBody(loopStmt.Body) ? loopStmt.EndToken.Next : throw new UnreachableException($"loop statement is meant to not have a body, use {typeof(OneBodyLoopInvariantMaintainProofChange).Name} instead"));
 }
 
 public class AssertWFChange(MemberDecl memberDecl, AssertStmt assertStmt) :

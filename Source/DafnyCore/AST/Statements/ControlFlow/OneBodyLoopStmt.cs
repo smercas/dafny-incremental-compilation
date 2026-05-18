@@ -94,7 +94,7 @@ public abstract class OneBodyLoopStmt : LoopStmt {
   }
 
   protected OneBodyLoopStmt(Protector protector, OneBodyLoopStmt original, IEnumerable<Statement>? additional = null) : base(protector, original) {
-    Body = (original.Body is null && additional is null) ? null : (original.Body ?? new BlockStmt(SourceOrigin.NoToken, [])).WithProtections(protector, additional ?? []);
+    Body = (original.Body is null && additional is null) ? null : (original.Body ?? new BlockStmt(SourceOrigin.TokenForGeneratedLoopBody, [])).WithProtections(protector, additional ?? []);
   }
   public abstract override OneBodyLoopStmt WithProtections(Protector protector);
 }
