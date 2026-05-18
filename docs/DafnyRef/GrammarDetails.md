@@ -16,7 +16,7 @@ parameterized by boolean parameters that control variations of the
 production rules, such as whether a particular alternative is permitted or
 not. Using such attributes allows combining non-terminals with quite
 similar production rules, making a simpler, more compact and more
-readable grammer.
+readable grammar.
 
 The grammar rules presented here replicate those in the source
 code, but omit semantic actions, error recovery markers, and
@@ -103,7 +103,7 @@ reservedword =
     "const" | "constructor" | "continue" |
     "datatype" | "decreases" |
     "else" | "ensures" | "exists" | "expect" | "export" | "extends" |
-    "false" | "for" | "forall" | "fp64" | "fresh" | "function" | "ghost" |
+    "false" | "for" | "forall" | "fp32" | "fp64" | "fresh" | "function" | "ghost" |
     "if" | "imap" | "import" | "in" | "include" |
     "int" | "invariant" | "is" | "iset" | "iterator" |
     "label" | "lemma" | "map" | "match" | "method" |
@@ -322,7 +322,7 @@ NameSegmentForTypeName = Ident [ GenericInstantiation ]
 BoolType_ = "bool"
 IntType_ = "int"
 RealType_ = "real"
-FloatType_ = "fp64"
+FloatType_ = "fp32" | "fp64"
 BitVectorType_ = bvToken
 OrdinalType_ = "ORDINAL"
 CharType_ = "char"
@@ -686,7 +686,7 @@ MethodSpec =
 ````grammar
 FunctionSpec =
   { RequiresClause(allowLabel: true)
-  | ReadsClause(allowLemma: false, allowLambda: false, allowWild: true)
+  | ReadsClause(allowLemma: false, allowLambda: false, allowWild: true, allowDoubleWild: true)
   | EnsuresClause(allowLambda: false)
   | DecreasesClause(allowWildcard: false, allowLambda: false)
   }
@@ -697,7 +697,7 @@ FunctionSpec =
 
 ````grammar
 LambdaSpec =
-  { ReadsClause(allowLemma: true, allowLambda: false, allowWild: true)
+  { ReadsClause(allowLemma: true, allowLambda: false, allowWild: true, allowDoubleWild: false)
   | "requires" Expression(allowLemma: false, allowLambda: false)
   }
 ````
@@ -708,7 +708,7 @@ LambdaSpec =
 ````grammar
 IteratorSpec =
   { ReadsClause(allowLemma: false, allowLambda: false,
-                                  allowWild: false)
+                allowWild: false, allowDoubleWild: false)
   | ModifiesClause(allowLambda: false)
   | [ "yield" ] RequiresClause(allowLabel: !isYield)
   | [ "yield" ] EnsuresClause(allowLambda: false)
@@ -785,10 +785,10 @@ InvariantClause_ =
 ([discussion](#sec-reads-clause)) 
 
 ````grammar
-ReadsClause(allowLemma, allowLambda, allowWild) =
+ReadsClause(allowLemma, allowLambda, allowWild, allowDoubleWild) =
   "reads" { Attribute }
-  PossiblyWildFrameExpression(allowLemma, allowLambda, allowWild)
-  { "," PossiblyWildFrameExpression(allowLemma, allowLambda, allowWild) }
+  PossiblyWildFrameExpression(allowLemma, allowLambda, allowWild, allowDoubleWild)
+  { "," PossiblyWildFrameExpression(allowLemma, allowLambda, allowWild, allowDoubleWild) }
 ````
 
 #### 17.2.5.12. Frame expressions {#g-frame-expression}
@@ -802,8 +802,9 @@ FrameExpression(allowLemma, allowLambda) =
 
 FrameField = "`" IdentOrDigits
 
-PossiblyWildFrameExpression(allowLemma, allowLambda, allowWild) =
+PossiblyWildFrameExpression(allowLemma, allowLambda, allowWild, allowDoubleWild) =
   ( "*"  // error if !allowWild and '*'
+  | "**"  // error if !allowDoubleWild and '**'
   | FrameExpression(allowLemma, allowLambda)
   )
 ````

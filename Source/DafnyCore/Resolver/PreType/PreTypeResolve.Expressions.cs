@@ -463,13 +463,16 @@ namespace Microsoft.Dafny {
               case UnaryOpExpr.Opcode.Allocated:
                 // the argument is allowed to have any type at all
                 opExpr.PreType = ConstrainResultToBoolFamily(opExpr.Origin, "allocated", "boolean literal used as if it had type {0}");
-                if ((resolutionContext.CodeContext is Function && !resolutionContext.InOld) ||
+                if ((resolutionContext.CodeContext is Function { ReadsDoubleStar: false } && !resolutionContext.InOld) ||
                     resolutionContext.CodeContext is ConstantField ||
                     CodeContextWrapper.Unwrap(resolutionContext.CodeContext) is RedirectingTypeDecl) {
                   var declKind = CodeContextWrapper.Unwrap(resolutionContext.CodeContext) is RedirectingTypeDecl redir
                     ? redir.WhatKind
                     : ((MemberDecl)resolutionContext.CodeContext).WhatKind;
-                  ReportError(opExpr, "a {0} definition is not allowed to depend on the set of allocated references", declKind);
+                  var hint = resolutionContext.CodeContext is Function { Name: var name } ?
+                    $"; perhaps declare {declKind} '{name}' with 'reads **'" :
+                    "";
+                  ReportError(opExpr, $"a {declKind} definition is not allowed to depend on the set of allocated references{hint}");
                 }
                 break;
               case UnaryOpExpr.Opcode.Assigned:
@@ -493,31 +496,35 @@ namespace Microsoft.Dafny {
               ReportError(e, "~ prefix must immediately precede the literal with no intervening space");
             }
 
-            // Validate that the inner expression is a numeric literal (or a negation of one)
             var innerExpr = e.Expr;
-            bool isNegated = false;
 
             if (innerExpr is NegationExpression neg) {
               innerExpr = neg.E;
-              isNegated = true;
             }
 
             if (innerExpr is LiteralExpr lit) {
               if (lit.Value is BigDec decValue) {
-                var isExact = BigFloat.FromBigDec(decValue, 53, 11, out var floatValue);
-                if (isExact) {
-                  var valueToReport = isNegated ? -decValue : decValue;
-                  ReportError(e, $"The approximate literal prefix ~ is not allowed on the exactly representable value {valueToReport}. Remove the ~ prefix.");
-                }
+                // Create a proxy that can be constrained to fp32 or fp64
+                var floatProxy = CreatePreTypeProxy("approximate literal");
+
+                // Don't add default advice - let context (e.g., 'as fp32') determine the type
+                // Fallback to fp64 is applied later for unresolved proxies
+
+                // Add confirmation that it must be fp32 or fp64 (not real)
+                AddConfirmation(PreTypeConstraints.CommonConfirmationBag.InFloatFamily, floatProxy, e.Origin, "approximate literal used as if it had type {0}");
+
+                e.PreType = floatProxy;
+                e.ResolvedExpression = e.Expr;
+                e.Expr.PreType = floatProxy;
+                lit.PreType = floatProxy;
 
                 if (lit is DecimalLiteralExpr decLit) {
-                  decLit.ResolvedFloatValue = floatValue;
+                  decLit.IsApproximate = true;
+                }
+                if (e.Expr is DecimalLiteralExpr exprDecLit && exprDecLit != lit) {
+                  exprDecLit.IsApproximate = true;
                 }
 
-                e.PreType = new DPreType(BuiltInTypeDecl(PreType.TypeNameFp64), []);
-                e.ResolvedExpression = e.Expr;
-                e.Expr.PreType = new DPreType(BuiltInTypeDecl(PreType.TypeNameFp64), []);
-                lit.PreType = new DPreType(BuiltInTypeDecl(PreType.TypeNameFp64), []);
               } else if (lit.Value is BigInteger) {
                 ReportError(e, "~ prefix not allowed on integer literals");
                 e.PreType = new DPreType(BuiltInTypeDecl(PreType.TypeNameInt), []);
@@ -564,8 +571,8 @@ namespace Microsoft.Dafny {
                     } else {
                       errorMessageFormat = "type conversion to a real-based type is allowed only from real (got {1})";
                     }
-                  } else if (familyDeclName == PreType.TypeNameFp64) {
-                    errorMessageFormat = "type conversion to fp64 is allowed only from int and real types (got {1})";
+                  } else if (familyDeclName is PreType.TypeNameFp32 or PreType.TypeNameFp64) {
+                    errorMessageFormat = $"type conversion to {familyDeclName} is allowed only from numeric types (int, real, fp32, fp64) (got {{1}})";
                   } else if (IsBitvectorName(familyDeclName)) {
                     errorMessageFormat = "type conversion to a bitvector-based type is allowed only from numeric and bitvector types, char, and ORDINAL (got {1})";
                   } else if (familyDeclName == PreType.TypeNameChar) {
@@ -584,7 +591,16 @@ namespace Microsoft.Dafny {
                 }
                 return string.Format(errorMessageFormat, toPreType, e.E.PreType);
               };
-              AddComparableConstraint(toPreType, e.E.PreType, expr.Origin, true, errorMessage);
+
+              // For approximate literals with fp32/fp64 target, use equality to infer the target type
+              if (toPreType.Normalize() is DPreType dtoPreType2 &&
+                  (dtoPreType2.Decl.Name == PreType.TypeNameFp32 || dtoPreType2.Decl.Name == PreType.TypeNameFp64) &&
+                  e.E is ConcreteSyntaxExpression { ResolvedExpression: DecimalLiteralExpr { IsApproximate: true } }) {
+                Constraints.AddEqualityConstraint(toPreType, e.E.PreType, expr.Origin, errorMessage());
+                Constraints.AddDefaultAdvice(e.E.PreType, dtoPreType2.Decl.Name == PreType.TypeNameFp32 ? CommonAdvice.Target.Fp32 : CommonAdvice.Target.Fp64);
+              } else {
+                AddComparableConstraint(toPreType, e.E.PreType, expr.Origin, true, errorMessage);
+              }
               e.PreType = toPreType;
             } else {
               e.PreType = CreatePreTypeProxy("'as' target type");
@@ -785,7 +801,7 @@ namespace Microsoft.Dafny {
             lambdaExpr.PreType = BuiltInArrowType(e.BoundVars.ConvertAll(v => v.PreType), e.Body.PreType, e.Reads.Expressions.Count != 0, e.Range != null);
             break;
           }
-        case WildcardExpr: {
+        case WildcardExpr or DoubleWildcardExpr: {
             var obj = new DPreType(BuiltInTypeDecl(PreType.TypeNameObjectQ), []);
             expr.PreType = new DPreType(BuiltInTypeDecl(PreType.TypeNameSet), [obj]);
             break;
@@ -1636,17 +1652,22 @@ namespace Microsoft.Dafny {
           }
         }
 
-      } else if (name == "fp64") {
-        // Special handling for fp64 (on-demand initialization)
-        resolver.ProgramResolver.SystemModuleManager.EnsureFp64TypeInitialized(resolver.ProgramResolver);
-        var fp64Decl = resolver.ProgramResolver.SystemModuleManager.valuetypeDecls[(int)ValuetypeVariety.Fp64];
+      } else if (name is "fp32" or "fp64") {
+        // Special handling for float types (on-demand initialization)
+        var variety = name == "fp32" ? ValuetypeVariety.Fp32 : ValuetypeVariety.Fp64;
+        if (name == "fp32") {
+          resolver.ProgramResolver.SystemModuleManager.EnsureFloatTypesInitialized(resolver.ProgramResolver);
+        } else {
+          resolver.ProgramResolver.SystemModuleManager.EnsureFp64TypeInitialized(resolver.ProgramResolver);
+        }
+        var floatDecl = resolver.ProgramResolver.SystemModuleManager.valuetypeDecls[(int)variety];
 
         // Add to moduleInfo.TopLevels for future lookups
-        if (!resolver.moduleInfo.TopLevels.ContainsKey("fp64")) {
-          resolver.moduleInfo.TopLevels["fp64"] = fp64Decl;
+        if (!resolver.moduleInfo.TopLevels.ContainsKey(name)) {
+          resolver.moduleInfo.TopLevels[name] = floatDecl;
         }
 
-        r = CreateResolver_IdentifierExpr(expr.Origin, name, expr.OptTypeArguments, fp64Decl);
+        r = CreateResolver_IdentifierExpr(expr.Origin, name, expr.OptTypeArguments, floatDecl);
 
       } else if (resolver.moduleInfo.TopLevels.TryGetValue(name, out var decl)) {
         // ----- 3. Member of the enclosing module
@@ -1667,7 +1688,7 @@ namespace Microsoft.Dafny {
           // We have found a module name or a type name, neither of which is an expression. However, the NameSegment we're
           // looking at may be followed by a further suffix that makes this into an expression. We postpone the rest of the
           // resolution to any such suffix. For now, we create a temporary expression that will never be seen by the compiler
-          // or verifier, just to have a placeholder where we can recorded what we have found.
+          // or verifier, just to have a placeholder where we can record what we have found.
           if (!isLastNameSegment) {
             if (decl is ClassLikeDecl cd && cd.NonNullTypeDecl != null && name != cd.NonNullTypeDecl.Name) {
               // A possibly-null type C? was mentioned. But it does not have any further members. The program should have used
@@ -1905,7 +1926,7 @@ namespace Microsoft.Dafny {
             // We have found a module name or a type name, neither of which is an expression. However, the ExprDotName we're
             // looking at may be followed by a further suffix that makes this into an expression. We postpone the rest of the
             // resolution to any such suffix. For now, we create a temporary expression that will never be seen by the compiler
-            // or verifier, just to have a placeholder where we can recorded what we have found.
+            // or verifier, just to have a placeholder where we can record what we have found.
             if (!isLastNameSegment) {
               if (decl is ClassLikeDecl cd && cd.NonNullTypeDecl != null && name != cd.NonNullTypeDecl.Name) {
                 // A possibly-null type C? was mentioned. But it does not have any further members. The program should have used
@@ -1961,8 +1982,8 @@ namespace Microsoft.Dafny {
         }
         var cd = r == null ? ty.AsTopLevelTypeWithMembersBypassInternalSynonym : null;
 
-        // Special handling for built-in types like fp64
-        if (cd == null && ty.IsFp64Type && ri.Decl is ValuetypeDecl valuetypeDecl) {
+        // Special handling for built-in types like fp32 and fp64
+        if (cd == null && ty.IsFloatingPointType && ri.Decl is ValuetypeDecl valuetypeDecl) {
           cd = valuetypeDecl;
         }
 
@@ -1978,8 +1999,8 @@ namespace Microsoft.Dafny {
             }
             // Create the appropriate type for the StaticReceiverExpr
             UserDefinedType receiverType;
-            if (ty.IsFp64Type && ri.Decl is ValuetypeDecl vtDecl) {
-              // For built-in types like fp64, create a UserDefinedType from the ValuetypeDecl
+            if (ty.IsFloatingPointType && ri.Decl is ValuetypeDecl vtDecl) {
+              // For built-in types like fp32/fp64, create a UserDefinedType from the ValuetypeDecl
               receiverType = new UserDefinedType(expr.Origin, vtDecl.Name, vtDecl, ri.TypeArgs);
             } else {
               receiverType = (UserDefinedType)ty.NormalizeExpand();
@@ -2275,7 +2296,7 @@ namespace Microsoft.Dafny {
     /// case, "legalSourceConstructors" contains both ghost and compiled constructors.
     ///
     /// The reason for computing both desugarings here is that it's too early to tell if the DatatypeUpdateExpr is being used in
-    /// a ghost or compiled context. This is a consequence of doing the deguaring so early. But it's also convenient to do the
+    /// a ghost or compiled context. This is a consequence of doing the desugaring so early. But it's also convenient to do the
     /// desugaring during resolution, because then the desugaring can be constructed as a non-resolved expression on which ResolveExpression
     /// is called--this is easier than constructing an already-resolved expression.
     /// </summary>
@@ -2654,7 +2675,7 @@ namespace Microsoft.Dafny {
     }
 
     /// <summary>
-    /// Desugar the elphant-operator expression
+    /// Desugar the elephant-operator expression
     ///     var x: T :- E; Body
     /// into
     ///     var burrito := E;

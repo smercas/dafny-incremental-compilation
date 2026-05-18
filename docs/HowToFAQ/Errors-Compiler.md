@@ -244,7 +244,7 @@ To be part of a compiled program, each method must have a body.
 Ghost methods are the equivalent of unchecked assumptions
 so they too must have bodies.
 
-## **Warning: assume statement has no {:axiom} annotation** {#r_assume_statement_without_axiom}
+## **Warning: program contains an assume statement (to suppress this warning, annotate the statement with {:axiom})** {#r_assume_statement_without_axiom}
 
 <!-- %check-run -->
 ```dafny
@@ -460,7 +460,7 @@ Note that a `modify` statement with a body is deprecated.
 
 ## **Error: this let-such-that expression is too advanced for the current compiler; Dafny's heuristics cannot find any bound for variable '_name_'** {#c_let_such_that_is_too_complex}
 
-<!-- TODO: needs example and explanataion -->
+<!-- TODO: needs example and explanation -->
 _The documentation of this problem is in progress._
 
 <!-- DafnyCore/Compilers/CSharp/Synthesizer-Csharp.cs -->

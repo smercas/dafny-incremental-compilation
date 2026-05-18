@@ -22,7 +22,7 @@ public class LiteralExpr : Expression, ICloneable<LiteralExpr> {
   ///   * a string for a string literal
   ///     This case always uses the subclass StringLiteralExpr.
   ///     Note, the string is stored with all escapes as characters.  For example, the input string "hello\n" is
-  ///     stored in a LiteralExpr has being 7 characters long, whereas the Dafny (and C#) length of this string is 6.
+  ///     stored in a LiteralExpr as being 7 characters long, whereas the Dafny (and C#) length of this string is 6.
   ///     This simplifies printing of the string, both when pretty printed as a Dafny expression and when being
   ///     compiled into C# code.  The parser checks the validity of the escape sequences and the verifier deals
   ///     with turning them into single characters.
@@ -153,6 +153,12 @@ public class DecimalLiteralExpr : LiteralExpr, ICloneable<DecimalLiteralExpr> {
   /// Null if not yet resolved or if assigned to a real type.
   /// </summary>
   public BigFloat? ResolvedFloatValue { get; set; }
+
+  /// <summary>
+  /// True if this literal is part of an approximate literal expression (~prefix).
+  /// Used to skip exact representability checks.
+  /// </summary>
+  public bool IsApproximate { get; set; }
 
   [SyntaxConstructor]
   public DecimalLiteralExpr(IOrigin origin, object value)

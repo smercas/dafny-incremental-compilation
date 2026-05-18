@@ -1,5 +1,5 @@
 ---
-title: "How do I write specifications for a lambda expression in a sequence constructor?"
+title: How do I write specifications for a lambda expression in a sequence constructor?
 ---
 
 ## Question
@@ -22,7 +22,7 @@ function Firsts0(cs: seq<C>): seq<int> {
 Dafny complains about the array index and an insufficient reads clause in the lambda function.
 Both of these need specifications, but where are they to be written.
 
-The specifications in a lamda function expression are written after the formal aarguments
+The specifications in a lambda function expression are written after the formal arguments
 but before the `=>`.
 
 The array index problem is solved by a `requires` clause that limits the range of the index::

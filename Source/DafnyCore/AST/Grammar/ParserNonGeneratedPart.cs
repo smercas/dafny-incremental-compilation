@@ -42,7 +42,7 @@ public partial class Parser {
 
   bool IsQuantifierVariableDecl(QuantifiedVar previousVar) {
     // Introducing per-quantified variable ranges creates some ambiguities in the grammar,
-    // since before that the range would terminate the quantifed domain. For example, the following statement:
+    // since before that the range would terminate the quantified domain. For example, the following statement:
     //
     // print set x | E, y;
     //
@@ -359,7 +359,7 @@ public partial class Parser {
         identCount++;
         x = scanner.Peek();
         if (x.kind == _colon) {
-          // a colon belongs only in a lamdba signature, so this must be a lambda (or something ill-formed)
+          // a colon belongs only in a lambda signature, so this must be a lambda (or something ill-formed)
           return true;
         }
       }
@@ -571,6 +571,7 @@ public partial class Parser {
       case _nat:
       case _int:
       case _real:
+      case _fp32:
       case _fp64:
       case _ORDINAL:
       case _string:

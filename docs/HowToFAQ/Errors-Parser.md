@@ -1,9 +1,9 @@
 <!-- %check-resolve %default %useHeadings %check-ids -->
 
-<!-- The file Errors-Parser.template is used along with Parser-Errors.cs to produce Errors-Parser.md.
+<!-- The file Errors-Parser.template is used along with ParserErrors.cs to produce Errors-Parser.md.
      Errors-Parser.template holds the structure of the markdown file and the examples of each error message.
-     Parser-Errors.cs holds the text of error explanations, so they are just in the source code rather than duplicated also in markdown.
-     The content of Errors-Parser.template and Parser-Errors.cs are tied together by the errorids.
+     ParserErrors.cs holds the text of error explanations, so they are just in the source code rather than duplicated also in markdown.
+     The content of Errors-Parser.template and ParserErrors.cs are tied together by the errorids.
      Thus Errors-Parser.md is a generated file that should not be edited itself.
      The program make-error-catalog does the file generation.
 -->
@@ -226,7 +226,7 @@ static predicate p() { true }
 ```
 
 All names declared in a module (outside a class-like entity) are implicitly `static`.
-Dafny does not allow them to be explictly, redundantly, declared `static`.
+Dafny does not allow them to be explicitly, redundantly, declared `static`.
 
 ## **Warning: module-level methods are always non-instance, so the 'static' keyword is not allowed here** {#p_module_level_method_always_static}
 
@@ -236,7 +236,7 @@ static method m() {}
 ```
 
 All names declared in a module (outside a class-like entity) are implicitly `static`.
-Dafny does not allow them to be explictly, redundantly, declared `static`.
+Dafny does not allow them to be explicitly, redundantly, declared `static`.
 
 ## **Error: in refining a datatype, the '...' replaces the '=' token and everything up to a left brace starting the declaration of the body; only members of the body may be changed in a datatype refinement** {#p_bad_datatype_refinement}
 
@@ -277,7 +277,7 @@ static const i := 9
 ```
 
 All names declared in a module (outside a class-like entity) are implicitly `static`.
-Dafny does not allow them to be explictly, redundantly, declared `static`.
+Dafny does not allow them to be explicitly, redundantly, declared `static`.
 
 ## **Error: expected an identifier after 'const' and any attributes** {#p_const_decl_missing_identifier}
 
@@ -551,6 +551,26 @@ containing such objects). `reads *` means the function may read anything.
 So it does not make sense to list `*` along with something more specific.
 If you mean that the function should be able to read anything, just list `*`.
 Otherwise, omit the `*` and list expressions containing all the objects that are read.
+
+## **Error: A 'reads' clause that contains '**' is not allowed to contain any other expressions** {#p_reads_star_star_must_be_alone}
+
+```dafny
+const a: object
+function f(): int
+  reads **, a
+{
+  0
+}
+```
+
+A reads clause lists the objects whose fields the function is allowed to read (or expressions 
+containing such objects). This equips the verifier with the knowledge that any heap
+modifications outside the reads set do not affect the result value of the function.
+`reads **` declares that the function may depend on anything in the heap; it even allows the function
+to depend on which objects are allocated (that is, the function may even depend on the _allocation state_).
+It does not make sense to list `**` along with something more specific.
+If you mean that the function is allowed to depend on anything in the heap, including the allocation state, then just list `**`.
+Otherwise, omit the `**` and list expressions containing all the objects that are read.
 
 ## **Error: out-parameters cannot have default-value expressions** {#p_no_defaults_for_out_parameters}
 
@@ -886,6 +906,20 @@ iterator Gen(start: int) yields (x: int)
 
 A `reads *` clause means the reads clause allows the functions it specifies to read anything.
 Such a clause is not allowed in an iterator specification.
+Insert a specific reads expression.
+
+## **Error: A '**' frame expression is not permitted here** {#p_no_double_wild_frame_expression}
+
+```dafny
+method Lambda() {
+  var f := (x: object) reads ** => 3;
+}
+```
+
+A `reads **` clause on a function says that the function is allowed to depend on anything in
+the heap; it even allows the function to depend on which objects are allocated (this is called
+the heap's _allocation state_).
+This is not supported for anonymous functions (aka lambda expressions) or iterators.
 Insert a specific reads expression.
 
 ## **Warning: _kind_ refinement is deprecated** {#p_deprecated_statement_refinement}

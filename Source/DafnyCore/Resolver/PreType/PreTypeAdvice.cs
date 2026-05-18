@@ -20,7 +20,7 @@ namespace Microsoft.Dafny {
   /// defines the type "MyIntSet", and thus set displays (like "{2, 3}"), set comprehensions (like "set x | 0 <= x < 10 :: 2 * x"),
   /// and set operators (like "+") are cloned for the new type.
   ///
-  /// Consequently, built-in constructors (like "7" and "{2, 3}") are overloaded. Type inference can therefore not immediately
+  /// Consequently, built-in constructors (like "7" and "{2, 3}") are overloaded. Type inference can therefore not immediately determine
   /// the type of these constructors. Using the examples above, the type of "7" could be either "int" or "MyInt". (For numeric constructors
   /// like "7", the type could also be the bitvector type of any width as well as the type "ORDINAL".) During type inference,
   /// if any of these constructors is used with specific types, then the overloading can be resolved. But if there are other such types,
@@ -91,6 +91,7 @@ namespace Microsoft.Dafny {
       Char,
       Int,
       Real,
+      Fp32,
       Fp64,
       String,
       Object
@@ -116,6 +117,7 @@ namespace Microsoft.Dafny {
         Target.Char => preTypeResolver.Type2PreType(Type.Char),
         Target.Int => preTypeResolver.Type2PreType(Type.Int),
         Target.Real => preTypeResolver.Type2PreType(Type.Real),
+        Target.Fp32 => preTypeResolver.Type2PreType(Type.Fp32),
         Target.Fp64 => preTypeResolver.Type2PreType(Type.Fp64),
         Target.String => preTypeResolver.Type2PreType(StringDecl()),
         Target.Object => preTypeResolver.Type2PreType(preTypeResolver.resolver.SystemModuleManager.ObjectQ()),

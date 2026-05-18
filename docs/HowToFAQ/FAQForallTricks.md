@@ -2,11 +2,11 @@
 title: "Why can't I write `forall t: Test :: t.i == 1` for an object `t`?"
 ---
 
-## Question:
+## Question
 
 Why can\'t I write `forall t: Test :: t.i == 1` for an object `t`?
 
-## Answer:
+## Answer
 
 This code
 

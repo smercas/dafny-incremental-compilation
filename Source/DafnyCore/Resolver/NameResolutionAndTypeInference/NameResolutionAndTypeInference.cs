@@ -265,7 +265,7 @@ namespace Microsoft.Dafny {
       foreach (var constraint in AllTypeConstraints) {
         var super = constraint.Super.Normalize();
         var sub = constraint.Sub.Normalize();
-        sb.AppendLine($"    {(super is IntVarietiesSupertype ? "int-like" : super is RealVarietiesSupertype ? "real-like" : super.ToString())} :> {sub}");
+        sb.AppendLine($"    {(super is IntVarietiesSupertype ? "int-like" : super is FloatVarietiesSupertype ? "float-like" : super is RealVarietiesSupertype ? "real-like" : super.ToString())} :> {sub}");
       }
       foreach (var xc in AllXConstraints) {
         sb.AppendLine($"    {xc}");
@@ -777,10 +777,14 @@ namespace Microsoft.Dafny {
           case UnaryOpExpr.Opcode.Allocated:
             // the argument is allowed to have any type at all
             expr.Type = Type.Bool;
-            if (
-              ((resolutionContext.CodeContext is Function && !resolutionContext.InOld) || resolutionContext.CodeContext is ConstantField || CodeContextWrapper.Unwrap(resolutionContext.CodeContext) is RedirectingTypeDecl)) {
+            if ((resolutionContext.CodeContext is Function { ReadsDoubleStar: false } && !resolutionContext.InOld) ||
+                resolutionContext.CodeContext is ConstantField ||
+                CodeContextWrapper.Unwrap(resolutionContext.CodeContext) is RedirectingTypeDecl) {
               var declKind = CodeContextWrapper.Unwrap(resolutionContext.CodeContext) is RedirectingTypeDecl redir ? redir.WhatKind : ((MemberDecl)resolutionContext.CodeContext).WhatKind;
-              reporter.Error(MessageSource.Resolver, expr, "a {0} definition is not allowed to depend on the set of allocated references", declKind);
+              var hint = resolutionContext.CodeContext is Function { Name: var name } ?
+                $"; perhaps declare {declKind} '{name}' with 'reads **'" :
+                "";
+              reporter.Error(MessageSource.Resolver, expr, $"a {declKind} definition is not allowed to depend on the set of allocated references{hint}");
             }
             break;
           case UnaryOpExpr.Opcode.Assigned:
@@ -796,7 +800,6 @@ namespace Microsoft.Dafny {
         // For unary operators it happens lazily in the getter of `e.ResolvedOp`.
       } else if (expr is ApproximateExpr) {
         var e = (ApproximateExpr)expr;
-        ResolveExpression(e.Expr, resolutionContext);
 
         // Verify no space between ~ and literal
         var tildePos = e.Origin.EntireRange.StartToken;
@@ -808,34 +811,29 @@ namespace Microsoft.Dafny {
         // Validate inner expression is numeric literal or negation
         var innerExpr = e.Expr;
 
-        // Check for negation
-        bool isNegated = false;
         if (innerExpr is NegationExpression neg) {
+          ResolveExpression(neg.E, resolutionContext);
           innerExpr = neg.E;
-          isNegated = true;
         }
 
         if (innerExpr is LiteralExpr lit) {
           if (lit.Value is BaseTypes.BigDec decValue) {
-            // Only allow ~ on inexact decimal values
-
-            // Check if exactly representable as fp64 (53-bit significand, 11-bit exponent)
-            var isExact = BigFloat.FromBigDec(decValue, 53, 11, out var floatValue);
-            if (isExact) {
-              var valueToReport = isNegated ? -decValue : decValue;
-              reporter.Error(MessageSource.Resolver, expr, $"The approximate literal prefix ~ is not allowed on the exactly representable value {valueToReport}. Remove the ~ prefix.");
-            }
-
-            // Store computed BigFloat value
-            if (lit is DecimalLiteralExpr decLit) {
-              decLit.ResolvedFloatValue = floatValue;
-            }
-
-            expr.Type = Type.Fp64;
+            // Approximate literals can be fp32 or fp64, inferred from context
+            var floatProxy = new InferredTypeProxy();
+            expr.Type = floatProxy;
             e.ResolvedExpression = e.Expr;
-            e.Expr.Type = Type.Fp64;
-            // Also set type on the inner literal so CheckTypeInferenceVisitor sees it
-            lit.Type = Type.Fp64;
+            e.Expr.Type = floatProxy;
+            lit.Type = floatProxy;
+
+            if (lit is DecimalLiteralExpr decLit) {
+              decLit.IsApproximate = true;
+            }
+            if (e.Expr is DecimalLiteralExpr exprDecLit && exprDecLit != lit) {
+              exprDecLit.IsApproximate = true;
+            }
+
+            // Constrain to fp32 or fp64 (not real). Exactness validated after type resolution.
+            ConstrainSubtypeRelation(new FloatVarietiesSupertype(), floatProxy, e.Origin, "approximate literal is used as if it had type {0}", floatProxy);
           } else if (lit.Value is BigInteger) {
             reporter.Error(MessageSource.Resolver, expr, "~ prefix not allowed on integer literals");
             expr.Type = Type.Int;
@@ -854,7 +852,7 @@ namespace Microsoft.Dafny {
           }
         } else {
           reporter.Error(MessageSource.Resolver, expr, "~ prefix can only be applied to numeric literals, not to variables or expressions");
-          expr.Type = e.Expr.Type;
+          expr.Type = e.Expr.Type ?? new InferredTypeProxy();
         }
       } else if (expr is ConversionExpr) {
         var e = (ConversionExpr)expr;
@@ -866,8 +864,13 @@ namespace Microsoft.Dafny {
             AddXConstraint(expr.Origin, "NumericOrBitvectorOrCharOrORDINAL", e.E.Type, "type conversion to an int-based type is allowed only from numeric and bitvector types, char, and ORDINAL (got {0})");
           } else if (e.ToType.IsNumericBased(Type.NumericPersuasion.Real)) {
             AddXConstraint(expr.Origin, "NumericOrBitvectorOrCharOrORDINAL", e.E.Type, "type conversion to a real-based type is allowed only from numeric and bitvector types, char, and ORDINAL (got {0})");
-          } else if (e.ToType.IsFp64Type) {
-            AddXConstraint(expr.Origin, "NumericOrBitvectorOrCharOrORDINAL", e.E.Type, "type conversion to fp64 is allowed only from numeric and bitvector types, char, and ORDINAL (got {0})");
+          } else if (e.ToType.IsFp32Type || e.ToType.IsFp64Type) {
+            var typeName = e.ToType.FloatTypeName;
+            AddXConstraint(expr.Origin, "NumericOrBitvectorOrCharOrORDINAL", e.E.Type, $"type conversion to {typeName} is allowed only from numeric and bitvector types, char, and ORDINAL (got {{0}})");
+            // For approximate literals, add subtype constraint to enable type inference
+            if (e.E is ConcreteSyntaxExpression { ResolvedExpression: DecimalLiteralExpr { IsApproximate: true } }) {
+              ConstrainSubtypeRelation(e.ToType, e.E.Type, expr.Origin, "");
+            }
           } else if (e.ToType.IsBitVectorType) {
             AddXConstraint(expr.Origin, "NumericOrBitvectorOrCharOrORDINAL", e.E.Type, "type conversion to a bitvector-based type is allowed only from numeric and bitvector types, char, and ORDINAL (got {0})");
           } else if (e.ToType.IsCharType) {
@@ -978,7 +981,7 @@ namespace Microsoft.Dafny {
               AddXConstraint(e.Origin, "Plussable", expr.Type, "type of + must be of a numeric type, a bitvector type, ORDINAL, char, a sequence type, or a set-like or map-like type (instead got {0})");
               ConstrainSubtypeRelation(expr.Type, e.E0.Type, expr.Origin, "type of left argument to + ({0}) must agree with the result type ({1})", e.E0.Type, expr.Type);
               ConstrainSubtypeRelation(expr.Type, e.E1.Type, expr.Origin, "type of right argument to + ({0}) must agree with the result type ({1})", e.E1.Type, expr.Type);
-              HandleFp64ArithmeticConstraints(e, expr);
+              HandleFloatArithmeticConstraints(e, expr);
             }
             break;
 
@@ -1001,7 +1004,7 @@ namespace Microsoft.Dafny {
               } else {
                 ConstrainSubtypeRelation(expr.Type, e.E1.Type, expr.Origin, "type of right argument to - ({0}) must agree with the result type ({1})", e.E1.Type, expr.Type);
               }
-              HandleFp64ArithmeticConstraints(e, expr);
+              HandleFloatArithmeticConstraints(e, expr);
             }
             break;
 
@@ -1010,7 +1013,7 @@ namespace Microsoft.Dafny {
               AddXConstraint(e.Origin, "Mullable", expr.Type, "type of * must be of a numeric type, bitvector type, or a set-like type (instead got {0})");
               ConstrainSubtypeRelation(expr.Type, e.E0.Type, expr.Origin, "type of left argument to * ({0}) must agree with the result type ({1})", e.E0.Type, expr.Type);
               ConstrainSubtypeRelation(expr.Type, e.E1.Type, expr.Origin, "type of right argument to * ({0}) must agree with the result type ({1})", e.E1.Type, expr.Type);
-              HandleFp64ArithmeticConstraints(e, expr);
+              HandleFloatArithmeticConstraints(e, expr);
             }
             break;
 
@@ -1031,7 +1034,7 @@ namespace Microsoft.Dafny {
             ConstrainSubtypeRelation(expr.Type, e.E1.Type,
               expr, "type of right argument to " + BinaryExpr.OpcodeString(e.Op) + " ({0}) must agree with the result type ({1})",
               e.E1.Type, expr.Type);
-            HandleFp64ArithmeticConstraints(e, expr);
+            HandleFloatArithmeticConstraints(e, expr);
             break;
 
           case BinaryExpr.Opcode.Mod:
@@ -1226,7 +1229,7 @@ namespace Microsoft.Dafny {
         Contract.Assert(e.Term.Type != null);
         scope.PopMarker();
         expr.Type = SelectAppropriateArrowType(e.Origin, e.BoundVars.ConvertAll(v => v.Type), e.Body.Type, e.Reads.Expressions.Count != 0, e.Range != null, SystemModuleManager);
-      } else if (expr is WildcardExpr) {
+      } else if (expr is WildcardExpr or DoubleWildcardExpr) {
         expr.Type = SystemModuleManager.ObjectSetType();
       } else if (expr is StmtExpr) {
         var e = (StmtExpr)expr;
@@ -1656,6 +1659,18 @@ namespace Microsoft.Dafny {
             followedRequestedAssignment = false;
           }
           break;
+        } else if (su is FloatVarietiesSupertype) {
+          if (t.IsFloatingPointType) {
+            // good, approximate literal can be fp32 or fp64
+          } else {
+            // hijack the setting of proxy; default to fp64
+            if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
+              Options.OutputWriter.Debug("hijacking {0}.T := {1} to instead assign {2}", proxy, t, Type.Fp64);
+            }
+            t = Type.Fp64;
+            followedRequestedAssignment = false;
+          }
+          break;
         } else if (su is RealVarietiesSupertype) {
           if (TypeProxy.GetFamily(t) == TypeProxy.Family.RealLike) {
             // good, let's continue with the request to equate the proxy with t
@@ -1809,6 +1824,12 @@ namespace Microsoft.Dafny {
         } else {
           return null;
         }
+      } else if (super is FloatVarietiesSupertype) {
+        if (sub.IsFloatingPointType || super.Equals(sub)) {
+          return [];
+        } else {
+          return null;
+        }
       } else if (super is RealVarietiesSupertype) {
         if (TypeProxy.GetFamily(sub) == TypeProxy.Family.RealLike || super.Equals(sub)) {
           return [];
@@ -1904,6 +1925,8 @@ namespace Microsoft.Dafny {
       Contract.Requires(super != null && !(super is TypeProxy));
       Contract.Requires(sub != null && !(sub is TypeProxy));
       if (super is IntVarietiesSupertype) {
+        return false;
+      } else if (super is FloatVarietiesSupertype) {
         return false;
       } else if (super is RealVarietiesSupertype) {
         return false;
@@ -2081,8 +2104,23 @@ namespace Microsoft.Dafny {
                 if (c.Super is ArtificialType) {
                   var proxy = c.Sub.NormalizeExpand() as TypeProxy;
                   if (proxy != null) {
+                    // Check if this proxy is involved in a comparison (constrained by a cmpType proxy)
+                    // If so, skip defaulting to let the comparison resolve naturally
+                    bool isInComparison = AllTypeConstraints.Exists(tc =>
+                      tc.Sub.Normalize() == proxy && tc.Super.Normalize() is TypeProxy);
+
+                    if (isInComparison) {
+                      // Keep the constraint for later resolution
+                      AllTypeConstraints.Add(c);
+                      continue;
+                    }
+
+                    // No comparison involvement, apply default
                     if (c.Super is IntVarietiesSupertype) {
                       AssignProxyAndHandleItsConstraints(proxy, Type.Int);
+                    } else if (c.Super is FloatVarietiesSupertype) {
+                      // Default to fp64 for FloatVarietiesSupertype
+                      AssignProxyAndHandleItsConstraints(proxy, Type.Fp64);
                     } else if (c.Super is RealVarietiesSupertype) {
                       // Default to real for RealVarietiesSupertype
                       AssignProxyAndHandleItsConstraints(proxy, Type.Real);
@@ -2311,7 +2349,7 @@ namespace Microsoft.Dafny {
       return proxy;
     }
 
-    static readonly HashSet<string> Fp64MemberNames = new() {
+    static readonly HashSet<string> FloatMemberNames = new() {
       "IsInfinite", "IsFinite", "IsNaN", "IsZero", "IsPositive", "IsNegative",
       "IsNormal", "IsSubnormal", "Equal", "Sqrt"
     };
@@ -2320,19 +2358,28 @@ namespace Microsoft.Dafny {
       "Plussable", "Minusable", "Mullable", "Divable"
     };
 
-    bool IsFp64Member(string memberName) {
-      return Fp64MemberNames.Contains(memberName);
+    bool IsFloatMember(string memberName) {
+      return FloatMemberNames.Contains(memberName);
     }
 
-    void HandleFp64ArithmeticConstraints(BinaryExpr e, Expression expr) {
+    void HandleFloatArithmeticConstraints(BinaryExpr e, Expression expr) {
       var leftType = e.E0.Type?.NormalizeExpand();
       var rightType = e.E1.Type?.NormalizeExpand();
 
-      if (!IsNumericOrProxyOrFp64(leftType) || !IsNumericOrProxyOrFp64(rightType)) {
+      if (!IsNumericOrProxyOrFloat(leftType) || !IsNumericOrProxyOrFloat(rightType)) {
         return;
       }
 
-      if (IsFp64Operand(e.E0, leftType) || IsFp64Operand(e.E1, rightType)) {
+      // Check for fp32 first
+      if (IsFloatOperand(e.E0, leftType, Type.Fp32) || IsFloatOperand(e.E1, rightType, Type.Fp32)) {
+        ConstrainSubtypeRelation(Type.Fp32, expr.Type, expr.Origin, "fp32 arithmetic produces fp32 result");
+        if (e.E0 is LiteralExpr) {
+          ConstrainSubtypeRelation(Type.Fp32, e.E0.Type, expr.Origin, "fp32 arithmetic requires fp32-compatible literal");
+        }
+        if (e.E1 is LiteralExpr) {
+          ConstrainSubtypeRelation(Type.Fp32, e.E1.Type, expr.Origin, "fp32 arithmetic requires fp32-compatible literal");
+        }
+      } else if (IsFloatOperand(e.E0, leftType, Type.Fp64) || IsFloatOperand(e.E1, rightType, Type.Fp64)) {
         ConstrainSubtypeRelation(Type.Fp64, expr.Type, expr.Origin, "fp64 arithmetic produces fp64 result");
         if (e.E0 is LiteralExpr) {
           ConstrainSubtypeRelation(Type.Fp64, e.E0.Type, expr.Origin, "fp64 arithmetic requires fp64-compatible literal");
@@ -2343,100 +2390,111 @@ namespace Microsoft.Dafny {
       }
     }
 
-    bool IsNumericOrProxyOrFp64(Type type) {
-      return type == null || type is TypeProxy || type.IsNumericBased() || type is Fp64Type;
+    bool IsNumericOrProxyOrFloat(Type type) {
+      return type == null || type is TypeProxy || type.IsNumericBased() || type is Fp32Type || type is Fp64Type;
     }
 
-    bool IsFp64Operand(Expression expr, Type type) {
-      return type is Fp64Type ||
-             (expr is IdentifierExpr { Var.Type: not null } id && id.Var.Type.NormalizeExpand() is Fp64Type);
+    bool IsFloatOperand(Expression expr, Type type, Type floatType) {
+      return type.Equals(floatType) ||
+             (expr is IdentifierExpr { Var.Type: not null } id && id.Var.Type.NormalizeExpand().Equals(floatType));
+    }
+
+    bool TryResolveFp32Proxy(TypeProxy tProxy) {
+      var visited = new HashSet<Type>();
+      if (TraceFloatConnection(tProxy, Type.Fp32, visited)) {
+        if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
+          Options.OutputWriter.Debug("  Found fp32 connection, assigning proxy");
+        }
+        AssignProxyAndHandleItsConstraints(tProxy, Type.Fp32, true);
+        return true;
+      }
+      return false;
     }
 
     bool TryResolveFp64Proxy(TypeProxy tProxy) {
-      // Strategy 1: Trace through constraints to find fp64 relationships
       var visited = new HashSet<Type>();
-      if (TraceFp64Connection(tProxy, visited)) {
+      if (TraceFloatConnection(tProxy, Type.Fp64, visited)) {
         if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
           Options.OutputWriter.Debug("  Found fp64 connection, assigning proxy");
         }
         AssignProxyAndHandleItsConstraints(tProxy, Type.Fp64, true);
         return true;
       }
-
-      // Strategy 2: Check if has numeric constraints compatible with fp64
-      if (HasNumericConstraints(tProxy)) {
-        AssignProxyAndHandleItsConstraints(tProxy, Type.Fp64, true);
-        return true;
-      }
-
-      // Strategy 3: Last resort - if no conflicting constraints, assume fp64
-      if (!HasConflictingConstraints(tProxy)) {
-        AssignProxyAndHandleItsConstraints(tProxy, Type.Fp64, true);
-        return true;
-      }
-
-      if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
-        Options.OutputWriter.Debug("  Could not resolve to fp64");
-      }
       return false;
     }
 
-    bool HasNumericConstraints(TypeProxy tProxy) {
-      return AllXConstraints.Any(xc => xc.Types.Contains(tProxy) && (
-        xc.ConstraintName is "NumericType" or "IntLikeOrBitvector" or "RealTypes" or "Orderable_Lt" or "Orderable_Gt" ||
-        ArithmeticConstraintNames.Contains(xc.ConstraintName)));
-    }
-
-    bool HasConflictingConstraints(TypeProxy tProxy) {
-      return AllTypeConstraints.Any(c => c.Sub == tProxy &&
-        c.Super.NormalizeExpand() is not TypeProxy and not Fp64Type and not RealType);
-    }
-
-    bool TraceFp64Connection(Type t, HashSet<Type> visited) {
+    bool TraceFloatConnection(Type t, Type floatType, HashSet<Type> visited) {
       if (t == null || visited.Contains(t)) return false;
       visited.Add(t);
 
-      if (t.IsFp64Type) {
+      if (t.Equals(floatType)) {
         if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
-          Options.OutputWriter.Debug("    TraceFp64Connection: Found fp64 type directly");
+          Options.OutputWriter.Debug($"    TraceFloatConnection: Found {floatType} type directly");
         }
         return true;
       }
 
       if (t is TypeProxy proxy) {
         if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
-          Options.OutputWriter.Debug("    TraceFp64Connection: Checking XConstraints for proxy {0}", t);
-          Options.OutputWriter.Debug("      Total XConstraints: {0}", AllXConstraints.Count);
+          Options.OutputWriter.Debug($"    TraceFloatConnection: Checking constraints for proxy {t}");
         }
-        // Check XConstraints that involve this proxy
+
+        // Check TypeConstraints for direct float connections
+        foreach (var tc in AllTypeConstraints) {
+          if (tc.Sub == proxy && tc.Super.NormalizeExpand().Equals(floatType)) {
+            return true;
+          }
+          if (tc.Super == proxy && tc.Sub.NormalizeExpand().Equals(floatType)) {
+            return true;
+          }
+          // Trace through proxy-to-proxy constraints
+          if (tc.Sub == proxy && tc.Super is TypeProxy superProxy) {
+            if (TraceFloatConnection(superProxy, floatType, visited)) {
+              return true;
+            }
+          }
+          if (tc.Super == proxy && tc.Sub is TypeProxy subProxy) {
+            if (TraceFloatConnection(subProxy, floatType, visited)) {
+              return true;
+            }
+          }
+        }
+
+        // Check arithmetic constraints
         foreach (var xc in AllXConstraints) {
           if (ArithmeticConstraintNames.Contains(xc.ConstraintName) && xc.Types.Contains(t)) {
             if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
-              Options.OutputWriter.Debug("      Found {0} constraint with types: {1}", xc.ConstraintName, string.Join(", ", xc.Types.Select(tt => tt.ToString())));
+              Options.OutputWriter.Debug($"      Found {xc.ConstraintName} constraint with types: {string.Join(", ", xc.Types.Select(tt => tt.ToString()))}");
             }
             foreach (var otherType in xc.Types) {
-              if (otherType != t && TraceFp64Connection(otherType, visited)) {
-                if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
-                  Options.OutputWriter.Debug("      Found fp64 connection through {0}", xc.ConstraintName);
+              if (otherType != t) {
+                if (otherType.NormalizeExpand().Equals(floatType)) {
+                  return true;
                 }
-                return true;
+                if (TraceFloatConnection(otherType, floatType, visited)) {
+                  if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
+                    Options.OutputWriter.Debug($"      Found {floatType} connection through {xc.ConstraintName}");
+                  }
+                  return true;
+                }
               }
             }
           }
         }
       }
 
-      // Check all constraints involving this type
+      // Check all TypeConstraints involving this type
       foreach (var c in AllTypeConstraints) {
-        if (c.Super == t && TraceFp64Connection(c.Sub, visited)) {
+        if (c.Super == t && TraceFloatConnection(c.Sub, floatType, visited)) {
           return true;
-        } else if (c.Sub == t && TraceFp64Connection(c.Super, visited)) {
+        } else if (c.Sub == t && TraceFloatConnection(c.Super, floatType, visited)) {
           return true;
         }
       }
 
+      // Follow assigned proxy
       if (t is TypeProxy proxy2 && proxy2.T != null) {
-        return TraceFp64Connection(proxy2.T, visited);
+        return TraceFloatConnection(proxy2.T, floatType, visited);
       }
 
       return false;
@@ -2880,7 +2938,7 @@ namespace Microsoft.Dafny {
 
     bool AssignKnownEndsFullstrength_SuperDirection(TypeProxy proxy) {
       Contract.Requires(proxy != null && proxy.T == null);
-      // First, compute the the join of the Assignable LHSs.  Then, compute
+      // First, compute the join of the Assignable LHSs.  Then, compute
       // the meet of that join and the supertypes.
       var joins = new List<Type>();
       foreach (var xc in AllXConstraints) {
@@ -3629,12 +3687,14 @@ namespace Microsoft.Dafny {
     /// Note: 1 and 2a are not used now, but they will be of interest when async task types are supported.
     /// </summary>
     private bool IsBuiltinTypeName(string name) {
-      return name == PreType.TypeNameFp64 || name == PreType.TypeNameInt || name == PreType.TypeNameReal || name == PreType.TypeNameBool || name == PreType.TypeNameChar || name == PreType.TypeNameORDINAL;
+      return name == PreType.TypeNameFp32 || name == PreType.TypeNameFp64 || name == PreType.TypeNameInt || name == PreType.TypeNameReal || name == PreType.TypeNameBool || name == PreType.TypeNameChar || name == PreType.TypeNameORDINAL;
     }
 
     private TopLevelDecl CreateBuiltinTypeDecl(string name, IOrigin origin) {
       // For built-in types, we need to return the corresponding ValuetypeDecl from the system module
-      if (name == "fp64") {
+      if (name == "fp32") {
+        ProgramResolver.SystemModuleManager.EnsureFloatTypesInitialized(ProgramResolver);
+      } else if (name == "fp64") {
         ProgramResolver.SystemModuleManager.EnsureFp64TypeInitialized(ProgramResolver);
       }
       foreach (var vtd in ProgramResolver.SystemModuleManager.valuetypeDecls) {
@@ -3681,7 +3741,7 @@ namespace Microsoft.Dafny {
             reporter.Error(MessageSource.Resolver, expr.Origin, "The name {0} ambiguously refers to a type in one of the modules {1} (try qualifying the type name with the module name)", expr.SuffixName, ad.ModuleNames());
           } else {
             // We have found a module name or a type name.  We create a temporary expression that will never be seen by the compiler
-            // or verifier, just to have a placeholder where we can recorded what we have found.
+            // or verifier, just to have a placeholder where we can record what we have found.
             r = CreateResolver_IdentifierExpr(expr.Origin, expr.SuffixName, expr.OptTypeArguments, decl);
           }
 #if ASYNC_TASK_TYPES
@@ -3923,7 +3983,7 @@ namespace Microsoft.Dafny {
       } else if (stmt is SingleAssignStmt) {
         SingleAssignStmt s = (SingleAssignStmt)stmt;
         int prevErrorCount = reporter.Count(ErrorLevel.Error);
-        ResolveExpression(s.Lhs, resolutionContext);  // allow ghosts for now, tighted up below
+        ResolveExpression(s.Lhs, resolutionContext);  // allow ghosts for now, tightened up below
         bool lhsResolvedSuccessfully = reporter.Count(ErrorLevel.Error) == prevErrorCount;
         Contract.Assert(s.Lhs.Type != null);  // follows from postcondition of ResolveExpression
         // check that LHS denotes a mutable variable or a field
@@ -4384,7 +4444,10 @@ namespace Microsoft.Dafny {
         // nothing to resolve, but record the fact that this bitvector width is in use
         SystemModuleManager.Bitwidths.Add(t.Width);
       } else if (type is BasicType) {
-        if (type is Fp64Type) {
+        if (type is Fp32Type) {
+          SystemModuleManager.Bitwidths.Add(32); // fp32 needs bv32 for int conversion
+          SystemModuleManager.FloatWidths.Add(32);
+        } else if (type is Fp64Type) {
           SystemModuleManager.Bitwidths.Add(64); // fp64 needs bv64 for int conversion
           SystemModuleManager.FloatWidths.Add(64);
         }
@@ -4434,7 +4497,7 @@ namespace Microsoft.Dafny {
         if (!t.HasTypeArg()) {
           // defaults and auto have been applied; check if we now have the right number of arguments
           reporter.Error(MessageSource.Resolver, tok, "Wrong number of type arguments (0 instead of 1) passed to type: {0}", t.CollectionTypeName);
-          // add a proxy type, to make sure that CollectionType will have have a non-null Arg
+          // add a proxy type, to make sure that CollectionType will have a non-null Arg
           t.SetTypeArg(new InferredTypeProxy());
         }
 
@@ -4723,7 +4786,9 @@ namespace Microsoft.Dafny {
       }
       Contract.Assert(receiverType is NonProxyType);  // there are only two kinds of types: proxies and non-proxies
 
-      if (receiverType.IsFp64Type) {
+      if (receiverType.IsFp32Type) {
+        ProgramResolver.SystemModuleManager.EnsureFloatTypesInitialized(ProgramResolver);
+      } else if (receiverType.IsFp64Type) {
         ProgramResolver.SystemModuleManager.EnsureFp64TypeInitialized(ProgramResolver);
       }
 
@@ -4837,14 +4902,15 @@ namespace Microsoft.Dafny {
         return Type.Real;
       }
 
-      // fp64 members require special resolution because fp64 is lazily initialized
-      if (memberName != null && IsFp64Member(memberName)) {
+      // fp32/fp64 members require special resolution because they are lazily initialized
+      if (memberName != null && IsFloatMember(memberName)) {
         if (Options.Get(CommonOptionBag.TypeInferenceDebug)) {
-          Options.OutputWriter.Debug("PartiallyResolveTypeForMemberSelection: checking fp64-only member {0} on type {1}", memberName, t);
+          Options.OutputWriter.Debug("PartiallyResolveTypeForMemberSelection: checking fp32/fp64 member {0} on type {1}", memberName, t);
         }
 
         // First, run a partial constraint solve to see if we can determine the type
-        PartiallySolveTypeConstraints(false);
+        // Use allowDecisions=true to ensure XConstraints like ContainerResult are fully processed
+        PartiallySolveTypeConstraints(true);
         t = t.NormalizeExpand();
 
         if (!(t is TypeProxy)) {
@@ -4854,7 +4920,13 @@ namespace Microsoft.Dafny {
           return t;
         }
 
-        if (TryResolveFp64Proxy((TypeProxy)t)) {
+        // Check for fp32 first
+        if (IsFloatMember(memberName) && TryResolveFp32Proxy((TypeProxy)t)) {
+          return Type.Fp32;
+        }
+
+        // Then check for fp64
+        if (IsFloatMember(memberName) && TryResolveFp64Proxy((TypeProxy)t)) {
           return Type.Fp64;
         }
       }
@@ -5088,6 +5160,9 @@ namespace Microsoft.Dafny {
       if (t == proxy) {
         if (u is TypeProxy) {
           return GetBaseTypeFromProxy((TypeProxy)u, determinedProxies);
+        } else if (u is ArtificialType) {
+          // Don't resolve proxy to artificial types - they're just constraints, not concrete types
+          return null;
         } else {
           return u;
         }
@@ -5360,7 +5435,7 @@ namespace Microsoft.Dafny {
     /// case, "legalSourceConstructors" contains both ghost and compiled constructors.
     ///
     /// The reason for computing both desugarings here is that it's too early to tell if the DatatypeUpdateExpr is being used in
-    /// a ghost or compiled context. This is a consequence of doing the deguaring so early. But it's also convenient to do the
+    /// a ghost or compiled context. This is a consequence of doing the desugaring so early. But it's also convenient to do the
     /// desugaring during resolution, because then the desugaring can be constructed as a non-resolved expression on which ResolveExpression
     /// is called--this is easier than constructing an already-resolved expression.
     /// </summary>
@@ -5626,9 +5701,9 @@ namespace Microsoft.Dafny {
           }
         } else {
           // We have found a module name or a type name, neither of which is an expression. However, the NameSegment we're
-          // looking at may be followed by a further suffix that makes this into an expresion. We postpone the rest of the
+          // looking at may be followed by a further suffix that makes this into an expression. We postpone the rest of the
           // resolution to any such suffix. For now, we create a temporary expression that will never be seen by the compiler
-          // or verifier, just to have a placeholder where we can recorded what we have found.
+          // or verifier, just to have a placeholder where we can record what we have found.
           if (!isLastNameSegment) {
             if (decl is ClassLikeDecl cd && cd.NonNullTypeDecl != null && name != cd.NonNullTypeDecl.Name) {
               // A possibly-null type C? was mentioned. But it does not have any further members. The program should have used
@@ -5828,7 +5903,7 @@ namespace Microsoft.Dafny {
           reporter.Error(MessageSource.Resolver, expr.Origin, "The name {0} ambiguously refers to a type in one of the modules {1} (try qualifying the type name with the module name)", expr.Name, ad.ModuleNames());
         } else {
           // We have found a module name or a type name, neither of which is a type expression. However, the NameSegment we're
-          // looking at may be followed by a further suffix that makes this into a type expresion. We postpone the rest of the
+          // looking at may be followed by a further suffix that makes this into a type expression. We postpone the rest of the
           // resolution to any such suffix. For now, we create a temporary expression that will never be seen by the compiler
           // or verifier, just to have a placeholder where we can record what we have found.
           r = CreateResolver_IdentifierExpr(expr.Origin, expr.Name, expr.OptTypeArguments, decl);
@@ -5960,9 +6035,9 @@ namespace Microsoft.Dafny {
             reporter.Error(MessageSource.Resolver, expr.Origin, "The name {0} ambiguously refers to a type in one of the modules {1} (try qualifying the type name with the module name)", expr.SuffixName, ad.ModuleNames());
           } else {
             // We have found a module name or a type name, neither of which is an expression. However, the ExprDotName we're
-            // looking at may be followed by a further suffix that makes this into an expresion. We postpone the rest of the
+            // looking at may be followed by a further suffix that makes this into an expression. We postpone the rest of the
             // resolution to any such suffix. For now, we create a temporary expression that will never be seen by the compiler
-            // or verifier, just to have a placeholder where we can recorded what we have found.
+            // or verifier, just to have a placeholder where we can record what we have found.
             if (!isLastNameSegment) {
               if (decl is ClassLikeDecl cd && cd.NonNullTypeDecl != null && name != cd.NonNullTypeDecl.Name) {
                 // A possibly-null type C? was mentioned. But it does not have any further members. The program should have used
@@ -6052,7 +6127,9 @@ namespace Microsoft.Dafny {
         }
       } else if (lhs != null) {
         // ----- 4. Look up name in the type of the Lhs
-        if (expr.Lhs.Type.IsFp64Type) {
+        if (expr.Lhs.Type.IsFp32Type) {
+          ProgramResolver.SystemModuleManager.EnsureFloatTypesInitialized(ProgramResolver);
+        } else if (expr.Lhs.Type.IsFp64Type) {
           ProgramResolver.SystemModuleManager.EnsureFp64TypeInitialized(ProgramResolver);
         }
         member = ResolveMember(expr.Origin, expr.Lhs.Type, name, out var tentativeReceiverType);
@@ -6063,7 +6140,7 @@ namespace Microsoft.Dafny {
             AddAssignableConstraint(expr.Origin, tentativeReceiverType, receiver.Type, "receiver type ({1}) does not have a member named " + name);
             r = ResolveExprDotCall(expr.Origin, expr.SuffixNameNode, receiver, tentativeReceiverType, member, expr.OptTypeArguments, resolutionContext, allowMethodCall);
           } else {
-            if (tentativeReceiverType.IsFp64Type && member.EnclosingClass is ValuetypeDecl vtd) {
+            if (tentativeReceiverType.IsFloatingPointType && member.EnclosingClass is ValuetypeDecl vtd) {
               receiver = new StaticReceiverExpr(expr.Origin, vtd, false, lhs);
             } else {
               receiver = new StaticReceiverExpr(expr.Origin, (UserDefinedType)tentativeReceiverType, (TopLevelDeclWithMembers)member.EnclosingClass, false, lhs);
