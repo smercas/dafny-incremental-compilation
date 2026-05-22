@@ -68,7 +68,8 @@ public class ActualBinding : NodeWithoutOrigin, IProtectable<ActualBinding> {
 
   protected ActualBinding(Protector protector, ActualBinding original) : this(
     original.FormalParameterName.ApplyIfNotNull(protector.Clone),
-    original.Actual.WithProtections(protector)
+    original.Actual.WithProtections(protector),
+    original.IsGhost
   ) { }
   public ActualBinding WithProtections(Protector protector) => new(protector, this);
 }

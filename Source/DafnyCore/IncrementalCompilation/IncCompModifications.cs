@@ -198,7 +198,7 @@ public class BodylessMethodOrConstructorEnsuresProofHintChange(MethodOrConstruct
 }
 
 public abstract class EnsuresStatementProofHintChange(MemberDecl memberDecl, Range range) :
-  ChangeToMemberDecl<MemberDecl>(memberDecl, range), IProofHint { }
+  ChangeToMemberDecl<MemberDecl>(memberDecl, range), IProofHint;
 
 public abstract class EnsuresForallStatementProofHintChange(MemberDecl memberDecl, Range range) :
   EnsuresStatementProofHintChange(memberDecl, range), IProofHint;
