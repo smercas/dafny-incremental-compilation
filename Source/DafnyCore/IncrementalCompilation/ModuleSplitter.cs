@@ -236,6 +236,7 @@ namespace DafnyCore.IncrementalCompilation {
                   when ContainingEitherOfAttrs(f, Constants.AttributeName).ToImmutableHashSet() is var attributeBearing && !attributeBearing.IsEmpty:
                 yield return new RefiningModuleGenerator.FromMethodOrFunction<E>(dcd, f, attributeBearing);
                 break;
+              case Microsoft.Dafny.Function: break;
               case MethodOrConstructor m_or_c when
                   ContainingEitherOfAttrs(m_or_c, Constants.AttributeName).ToImmutableHashSet() is var attributeBearing && !attributeBearing.IsEmpty:
                 yield return m_or_c switch {
@@ -244,11 +245,11 @@ namespace DafnyCore.IncrementalCompilation {
                   _ => throw new UnreachableException(),
                 };
                 break;
+              case MethodOrConstructor: break;
               default: throw new UnreachableException();
             }
             break;
-          default:
-            throw new UnreachableException();
+          default: throw new UnreachableException();
         }
         if (member is ICanVerify) { member.SetOrigin(new VerificationExclusionaryOrigin(member.Origin)); }
       }
