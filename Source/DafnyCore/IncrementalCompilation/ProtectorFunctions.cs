@@ -89,12 +89,11 @@ public static class ProtectorFunctions {
     }
     public sealed class ProtectToProve : ProtectorFunction, IChangeContextDependant {
       private static Function functionFrom(string name) {
-        var typeVar = "T".ToTypeParameter();
         return IdentityOf(
-          typeArgs: [typeVar,],
+          typeArgs: [],
           name: name,
           signature: (
-            ("x", typeVar).ToFormal(), [
+            ("x", new BoolType()).ToFormal(), [
             ("name", StringType()).ToFormal(),
               ("scope", new SeqType(new BoolType())).ToFormal(),
               ("id", new IntType()).ToFormal(),
@@ -128,12 +127,11 @@ public static class ProtectorFunctions {
     }
     public sealed class ProtectToProveImmediate : ProtectorFunction {
       private static Function functionFrom(string name) {
-        var typeVar = "T".ToTypeParameter();
         return IdentityOf(
-          typeArgs: [typeVar,],
+          typeArgs: [],
           name: name,
           signature: (
-            ("x", typeVar).ToFormal(), [
+            ("x", new BoolType()).ToFormal(), [
             ("name", StringType()).ToFormal(),
               ("scope", new SeqType(new BoolType())).ToFormal(),
               ("id", new IntType()).ToFormal(),
@@ -167,8 +165,9 @@ public static class ProtectorFunctions {
       public Microsoft.Boogie.Expr InvocationFrom(Microsoft.Boogie.Expr wfCheck, IOrigin tok, ProtectToProveApplySuffix protectToProveExpr, ExpressionTranslator etran, DafnyOptions options, ProofObligationDescription desc) {
         Contract.Requires(wfCheck.Type == Microsoft.Boogie.Type.Bool);
         var resolvedProtectToProveExpr = (protectToProveExpr.ResolvedExpression as FunctionCallExpr)!;
+        Contract.Assert(resolvedProtectToProveExpr.Args[0].Type == Type.Bool);
         List<(Microsoft.Boogie.Expr e, Type dt)> args = [
-          (wfCheck, Type.Bool),
+          (wfCheck,                                                         resolvedProtectToProveExpr.Args[0].Type),
           (etran.TranslateString(desc.GetAssertedExpr(options).ToString()), resolvedProtectToProveExpr.Args[1].Type),
           .. resolvedProtectToProveExpr.Args.Skip(2).Select(a => (etran.TrExpr(a.Resolved), a.Type))];
         return etran.BoogieGenerator.CondApplyUnbox(tok, new Microsoft.Boogie.NAryExpr(tok, new Microsoft.Boogie.FunctionCall(new Microsoft.Boogie.IdentifierExpr(tok, Function.FullSanitizedName, Microsoft.Boogie.Type.Bool)), [
