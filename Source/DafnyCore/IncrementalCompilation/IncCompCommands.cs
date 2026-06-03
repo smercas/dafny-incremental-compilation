@@ -13,6 +13,7 @@ public abstract record IncCompCommand {
   };
 }
 
+public sealed record WriteFormattedDafnyCodeWithChanges : IncCompCommand;
 public sealed record PrintAllProcessedDafnyCode : IncCompCommand;
 public abstract record PrintSomeProcessedDafnyCode : IncCompCommand;
 public sealed record PrintProcessedDafnyCodeOfChangedVerificationTasks : PrintSomeProcessedDafnyCode;

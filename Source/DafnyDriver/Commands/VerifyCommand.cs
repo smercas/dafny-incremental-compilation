@@ -128,6 +128,8 @@ public static class VerifyCommand {
                 "",
                 "Commands:",
                 "  :q                 Quit the program.",
+                "  :w                 Write changed dafny files into separate files",
+                "                   bearing the same name and the \".dfyf\" extension",
                 "  :ad                Print the entirety of the processed Dafny code",
                 "                   to the console (for debugging purposes).",
                 "  :d                 Print the processed Dafny code of the modified",
@@ -152,6 +154,9 @@ public static class VerifyCommand {
                 ""
               );
               return true;
+            case ":w":
+              options.Set(IncCompCommand.Option, new WriteFormattedDafnyCodeWithChanges());
+              return false;
             case ":ad":
               options.Set(IncCompCommand.Option, new PrintAllProcessedDafnyCode());
               return false;
@@ -255,6 +260,29 @@ public static class VerifyCommand {
           } else {
             var printer = new Printer(options.BaseOutputWriter, options);
             switch (options.Get(IncCompCommand.Option)) {
+              case WriteFormattedDafnyCodeWithChanges:
+                var changedURIs = ProtectToProveApplySuffix.AggregatedNonEmptyChanges.Select(c => c.Uri).ToImmutableHashSet();
+                var parsedProgram = (await compilation.Compilation.ParsedProgram)!;
+                foreach (var file in await compilation.Compilation.RootFiles) {
+                  if (!changedURIs.Contains(file.Uri)) { continue; }
+                  var firstToken = parsedProgram.GetFirstTokenForUri(file.Uri)!; // null only if file is empty, which can't be the case, since it has at least a non-empty change
+                  FileSnapshot? snapshot = null;
+                  string? originalText = null;
+                  try {
+                    snapshot = file.GetContent();
+                    originalText = await snapshot.Reader.ReadToEndAsync();
+                  } finally {
+                    // I'm not gonna bother, if this throws it's destined to throw
+                    snapshot!.Reader.Close();
+                    file.GetContent = () => snapshot with { Reader = new StringReader(originalText!) };
+                  }
+                  var formatted = Formatting.__default.ReindentProgramFromFirstToken(firstToken, IndentationFormatter.ForProgram(parsedProgram, file.Uri));
+                  if (formatted == originalText) { continue; } // file is perfectly formatted :)
+                  var path = $"{file.FilePath}f";
+                  SynchronousCliCompilation.WriteFile(path, formatted);
+                  await WriteLine($"wrote newly formatted version of {file.FilePath} to {path}");
+                }
+                break;
               case PrintAllProcessedDafnyCode:
                 printer.PrintProgram(resolution.ResolvedProgram, true);
                 break;
