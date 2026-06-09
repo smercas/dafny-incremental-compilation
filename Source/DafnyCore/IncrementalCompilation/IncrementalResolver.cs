@@ -198,8 +198,8 @@ public class SubsequentIncrementalResolver(Program program, ResolutionCache prev
 
     void ResolveAfterFirstAffectedModuleDecl((ModuleDecl, ModuleDecl) decls) =>
       GenericResolution(decls, (curr, prev) => {
-        if (IsAffectedModuleDecl(decls)) { return ResolveModuleDeclaration(curr, prev); }
         if (dependants.Contains(curr)) { return ResolveModuleDeclaration(curr); }
+        if (IsAffectedModuleDecl(decls)) { return ResolveModuleDeclaration(curr, prev); }
         return PrevCache.ModuleDeclResolutionResults[prev];
       });
 
