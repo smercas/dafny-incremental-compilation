@@ -14,7 +14,7 @@ namespace DafnyCore.IncrementalCompilation {
     protected static readonly Expression PlaceholderScope = new SeqDisplayExpr(SourceOrigin.NoToken, []);
     protected static readonly Expression PlaceholderId = new LiteralExpr(SourceOrigin.NoToken);
 
-    public new BaseProtectToProveApplySuffix Clone(Cloner cloner) => throw new InvalidOperationException("`ProtectToProveApplySuffix` logic does not allow for cloning");
+    public new BaseProtectToProveApplySuffix Clone(Cloner cloner) => cloner is ScopeCloner ? this : throw new InvalidOperationException("`ProtectToProveApplySuffix` logic does not allow for cloning");
 
     protected BaseProtectToProveApplySuffix(Expression e, Protector protector, ProtectorFunctions.ProtectorFunction function, BigInteger? id = null) : base(e.Origin, null, function.ToExprDotName(), [
         new(null, e.WithProtections(protector)),
