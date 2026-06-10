@@ -17,12 +17,14 @@ namespace DafnyCore.IncrementalCompilation {
     }
 
     public void ImportIn(Microsoft.Dafny.Program p) => p.DefaultModuleDef.SourceDecls.OfType<LiteralModuleDecl>().Where(lmd => lmd.ModuleDef.Implements is null).ForEach(ImportIn);
-    public void ImportIn(LiteralModuleDecl md) {
-      md.ModuleDef.SourceDecls.Add(ImportDecl(md.ModuleDef));
+    public void ImportIn(LiteralModuleDecl lmd) {
+      lmd.ModuleDef.SourceDecls.Add(ImportDecl(lmd.ModuleDef));
       Microsoft.Dafny.Util.Concat(
-        md.ModuleDef.SourceDecls.OfType<LiteralModuleDecl>(),
-        md.ModuleDef.PrefixNamedModules.Select(pnm => pnm.Module)
+        lmd.ModuleDef.SourceDecls.OfType<LiteralModuleDecl>(),
+        lmd.ModuleDef.PrefixNamedModules.Select(pnm => pnm.Module)
       ).Where(lmd => lmd.ModuleDef.Implements is null).ForEach(ImportIn);
+      lmd.ModuleDef.SourceDecls.OfType<ModuleExportDecl>().ForEach(ImportIn);
     }
+    public void ImportIn(ModuleExportDecl med) => med.Exports.Add(new ExportSignature(SourceOrigin.NoToken, ProtectorFunctions.ContainingModuleName, true));
   }
 }
