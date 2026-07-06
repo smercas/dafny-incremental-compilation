@@ -127,6 +127,16 @@ namespace Microsoft.Dafny {
             break;
           }
         case BlockStmt blockStmt:
+          if (blockStmt is OpaqueBlock opaque) {
+            wr.Write("opaque");
+            PrintSpec("ensures", opaque.Ensures, indent + IndentAmount);
+            if (opaque.Ensures.Count == 0) {
+              wr.Write(" ");
+            } else {
+              wr.WriteLine();
+              Indent(indent);
+            }
+          }
           PrintBlockStmt(blockStmt, indent);
           break;
         case IfStmt ifStmt: {

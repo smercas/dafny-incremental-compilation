@@ -123,7 +123,7 @@ public static class VerifyCommand {
                 sep,
                 "",
                 "Usage:",
-                "  ((<entryPoint>(wf|ph|ii|im): <modification> | <entryPoint>im<branchIndex>: <modification> | :h | :r | :c)\\n)* <command>",
+                "  ((<entryPoint>(wf|ph|ii|im): <modification> | <entryPoint>im<branchIndex>: <modification> | <command>)\\n)*",
                 "",
                 "",
                 "Commands:",
@@ -151,6 +151,8 @@ public static class VerifyCommand {
                 "  :as                Generate all SMT2 files.",
                 "  :s                 (DEFAULT) Generate only the SMT2 files that need",
                 "                   regeneration based on the provided modifications.",
+                "  :c                 Display currently active changes",
+                "  :r                 Clear active changes",
                 ""
               );
               return true;
