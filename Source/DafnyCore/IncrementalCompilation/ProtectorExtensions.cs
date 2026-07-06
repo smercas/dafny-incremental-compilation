@@ -33,7 +33,7 @@ namespace DafnyCore.IncrementalCompilation {
     private static IEnumerable<Statement> WithProtectionsAsSeparateStatements(this Statement s, Protector protector) {
       yield return s.WithProtections(protector);
       switch (s) {
-        case VarDeclStmt { Assign.Lhss: var newvars }:
+        case VarDeclStmt { Assign: not AssignSuchThatStmt, Assign.Lhss: var newvars }:
           foreach (var newvar in newvars) {
             yield return protector.Clone(newvar).ToProtectAssertion();
           }
@@ -47,7 +47,7 @@ namespace DafnyCore.IncrementalCompilation {
     }
     public static IEnumerable<Statement> WithProtections(this IEnumerable<Statement> ss, Protector protector) => ss.SelectMany(s => s.WithProtectionsAsSeparateStatements(protector));
 
-    public static StmtExpr WithPrependedAssertions(this Expression e, AssertStmt first, params AssertStmt[] secondUntilLast) => e.WithPrependedAssertions([first, ..secondUntilLast]);
+    public static StmtExpr WithPrependedAssertions(this Expression e, AssertStmt first, params AssertStmt[] secondUntilLast) => e.WithPrependedAssertions([first, .. secondUntilLast]);
     // enumerable must have at least one element
     public static StmtExpr WithPrependedAssertions(this Expression e, IEnumerable<AssertStmt> ss) {
       Contract.Requires(ss.Any());
@@ -65,16 +65,16 @@ namespace DafnyCore.IncrementalCompilation {
 
     public static BinaryExpr WithPrependedExpressions(this Expression e, Expression first, params Expression[] secondUntilLast) => e.WithPrependedExpressions([first, .. secondUntilLast]);
     // enumerable must have at least one element
-    public static BinaryExpr WithPrependedExpressions(this Expression e, IEnumerable<Expression> ss) {
-      Contract.Requires(ss.Any());
-      return ss.Reverse().AggregateAs(e.WrapWithParensIfNecessary() as Expression, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev)); // IPMTODO: check if this is ok
+    public static BinaryExpr WithPrependedExpressions(this Expression e, IEnumerable<Expression> es) {
+      Contract.Requires(es.Any());
+      return es.Reverse().AggregateAs(e.WrapWithParensIfNecessary() as Expression, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev)); // IPMTODO: check if this is ok
     }
     // Weaker version of `WithPrependedExpressions` that doesn't guarantee that the result is a `BinaryExpr`, but can accept being passed no elements
-    public static Expression WithPrependedExpressionsIfAny(this Expression e, params Expression[] ss) => e.WithPrependedExpressionsIfAny(ss as IEnumerable<Expression>);
+    public static Expression WithPrependedExpressionsIfAny(this Expression e, params Expression[] es) => e.WithPrependedExpressionsIfAny(es as IEnumerable<Expression>);
     // Weaker version of `WithPrependedExpressions` that doesn't guarantee that the result is a `BinaryExpr`, but can accept an empty enumerable
-    public static Expression WithPrependedExpressionsIfAny(this Expression e, IEnumerable<Expression> ss) {
-      Contract.Ensures(!ss.Any() || Contract.Result<Expression>() is StmtExpr);
-      var l = ss.ToList();
+    public static Expression WithPrependedExpressionsIfAny(this Expression e, IEnumerable<Expression> es) {
+      Contract.Ensures(!es.Any() || Contract.Result<Expression>() is StmtExpr);
+      var l = es.ToList();
       if (l.Count == 0) { return e; }
       return l.Reversed().Aggregate(e.WrapWithParensIfNecessary() as Expression, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev));
     }
@@ -82,5 +82,11 @@ namespace DafnyCore.IncrementalCompilation {
       ParensExpression pe => pe,
       _ => new ParensExpression(e.Origin, e),
     };
+    public static BinaryExpr ConjBinaryExprFrom(Expression first, params Expression[] secondUntilLast) => secondUntilLast.Reverse().AggregateAs(first, (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev));
+    public static BinaryExpr ConjBinaryExprFrom(IEnumerable<Expression> es) {
+      var l = es.ToList();
+      if (l.Count == 0) { throw new ArgumentException($"can't make a conjunction out of an empty list"); }
+      return l.SkipLast(1).Reverse().AggregateAs(l[^1], (prev, s) => new BinaryExpr(prev.Origin, BinaryExpr.Opcode.And, s, prev));
+    }
   }
 }

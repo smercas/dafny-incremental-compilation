@@ -125,12 +125,17 @@ public class ITEExpr : Expression, ICanFormat, ICloneable<ITEExpr> {
 
   protected ITEExpr(Protector protector, ITEExpr original) : base(protector, original) {
     IsBindingGuard = original.IsBindingGuard;
-    Test = (original.IsBindingGuard, original.Test) switch {
-      (false, _) => original.Test.WithProtections(protector),
-      (true, ExistsExpr { Range: null } test) => test.WithProtections(protector, ComprehensionExpr.Options.DontAddProtections),
+    (Test, Thn) = (original.IsBindingGuard, original.Test, original.Thn) switch {
+      (false, _                              , _          ) => (
+        original.Test.WithProtections(protector),
+        original.Thn.WithProtections(protector)
+      ),
+      (true , ExistsExpr { Range: null } test, LetExpr thn) => (
+        test.WithProtections(protector, ComprehensionExpr.Options.AddProtectionToTerm),
+        thn.WithProtections(protector)
+      ),
       _ => throw new UnreachableException(),
     };
-    Thn = original.Thn.WithProtections(protector); // if `IsBindingGuard` is true then `Thn` is a `LetExpr` and already protects the bindings
     Els = original.Els?.WithProtections(protector);
   }
   public override ITEExpr WithProtections(Protector protector) => new(protector, this);

@@ -46,17 +46,12 @@ public class GuardedAlternative : NodeWithOrigin, IAttributeBearingDeclaration, 
 
   protected GuardedAlternative(Protector protector, GuardedAlternative original) : base(protector, original) {
     IsBindingGuard = original.IsBindingGuard;
-    (Guard, Body) = (original.IsBindingGuard, original.Guard) switch {
-      (false, _) => (
-        original.Guard.WithProtections(protector),
-        original.Body.WithProtections(protector).ToList()
-      ),
-      (true, ExistsExpr { Range: null } guard) => (
-        guard.WithProtections(protector, ComprehensionExpr.Options.DontAddProtections),
-        [.. guard.BoundVars.Select(bv => bv.ToProtectAssertion()), .. original.Body.WithProtections(protector)]
-      ),
+    Guard = (original.IsBindingGuard, original.Guard) switch {
+      (false, _                               ) => original.Guard.WithProtections(protector),
+      (true , ExistsExpr { Range: null } guard) => guard.WithProtections(protector, ComprehensionExpr.Options.AddProtectionToTerm),
       _ => throw new UnreachableException(),
     };
+    Body = original.Body.WithProtections(protector).ToList();
     Attributes = protector.Clone(original.Attributes);
   }
   public GuardedAlternative WithProtections(Protector protector) => new(protector, this);

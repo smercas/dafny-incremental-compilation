@@ -123,17 +123,26 @@ public abstract partial class ComprehensionExpr : Expression, IAttributeBearingD
   public enum Options {
     DontAddProtections,
     AddProtectionOnBoundVarsInRange,
+    AddProtectionToTerm,
     Default = AddProtectionOnBoundVarsInRange,
   };
 
   protected ComprehensionExpr(Protector protector, ComprehensionExpr original, Options options) : base(protector, original) {
+    var toPrepend = original.BoundVars.Select(ProtectorFunctions.NewProtect.InvocationFrom).ToList();
     BoundVars = original.BoundVars.ConvertAll(bv => bv.WithProtections(protector));
     Range = original.Range?.WithProtections(protector);
     if (options == Options.AddProtectionOnBoundVarsInRange) {
-      Range = Range?.WithPrependedExpressionsIfAny(original.BoundVars.Select(bv => ProtectorFunctions.NewProtect.InvocationFrom(bv.Name)));
+      if (Range is not null) {
+        Range = Range?.WithPrependedExpressionsIfAny(toPrepend);
+      } else if (toPrepend.Count > 0) {
+        Range = ProtectorExtensions.ConjBinaryExprFrom(toPrepend);
+      }
     }
     Attributes = protector.Clone(original.Attributes);
     Term = original.Term.WithProtections(protector);
+    if (options == Options.AddProtectionToTerm) {
+      Term = Term.WithPrependedExpressionsIfAny(toPrepend);
+    }
   }
   public override ComprehensionExpr WithProtections(Protector protector) => WithProtections(protector, Options.Default);
   public abstract ComprehensionExpr WithProtections(Protector protector, Options options);

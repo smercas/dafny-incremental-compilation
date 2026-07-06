@@ -93,8 +93,8 @@ public abstract class OneBodyLoopStmt : LoopStmt {
     reporter.Warning(MessageSource.Resolver, "", Origin, text);
   }
 
-  protected OneBodyLoopStmt(Protector protector, OneBodyLoopStmt original, IEnumerable<Statement>? additional = null) : base(protector, original) {
-    Body = (original.Body is null && additional is null) ? null : (original.Body ?? new BlockStmt(SourceOrigin.TokenForGeneratedLoopBody, [])).WithProtections(protector, additional ?? []);
+  protected OneBodyLoopStmt(Protector protector, OneBodyLoopStmt original, IEnumerable<AttributedExpression>? additional = null) : base(protector, original, additional) {
+    Body = original.Body?.WithProtections(protector);
   }
   public abstract override OneBodyLoopStmt WithProtections(Protector protector);
 }

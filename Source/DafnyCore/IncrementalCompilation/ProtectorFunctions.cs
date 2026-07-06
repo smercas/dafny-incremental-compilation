@@ -32,6 +32,7 @@ public static class ProtectorFunctions {
       }
       public override Function Function { get; } = functionFrom("_protect");
 
+      public ApplySuffix InvocationFrom(BoundVar bv) => InvocationFrom(bv.Name);
       public ApplySuffix InvocationFrom(Expression expression) => new(expression.Origin, null, this.ToExprDotName(), [
         new(null, expression),
         new(null, new StringLiteralExpr(SourceOrigin.NoToken, expression.ToString(), false)),
@@ -167,7 +168,7 @@ public static class ProtectorFunctions {
         var resolvedProtectToProveExpr = (protectToProveExpr.ResolvedExpression as FunctionCallExpr)!;
         Contract.Assert(resolvedProtectToProveExpr.Args[0].Type == Type.Bool);
         List<(Microsoft.Boogie.Expr e, Type dt)> args = [
-          (wfCheck,                                                         resolvedProtectToProveExpr.Args[0].Type),
+          (wfCheck, resolvedProtectToProveExpr.Args[0].Type),
           (etran.TranslateString(desc.GetAssertedExpr(options).ToString()), resolvedProtectToProveExpr.Args[1].Type),
           .. resolvedProtectToProveExpr.Args.Skip(2).Select(a => (etran.TrExpr(a.Resolved), a.Type))];
         return etran.BoogieGenerator.CondApplyUnbox(tok, new Microsoft.Boogie.NAryExpr(tok, new Microsoft.Boogie.FunctionCall(new Microsoft.Boogie.IdentifierExpr(tok, Function.FullSanitizedName, Microsoft.Boogie.Type.Bool)), [

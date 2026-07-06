@@ -141,9 +141,15 @@ public class LetExpr : Expression, IAttributeBearingDeclaration, IBoundVarsBeari
   protected LetExpr(Protector protector, LetExpr original) : base(protector, original) {
     LHSs = original.LHSs.ConvertAll(lhs => lhs.WithProtections(protector));
     RHSs = original.RHSs.ConvertAll(lhs => lhs.WithProtections(protector));
-    Body = original.Body.WithProtections(protector).WithPrependedAssertionsIfAny(original.LHSs.Select(lhs => lhs.Var!.ToProtectAssertion()));
+    Body = original.Body.WithProtections(protector);
     Exact = original.Exact;
     Attributes = protector.Clone(original.Attributes);
+    if (!Exact) {
+      Contract.Assert(RHSs.Count == 1);
+      RHSs = [RHSs[0].WithPrependedExpressionsIfAny(original.LHSs.Select(lhs => ProtectorFunctions.NewProtect.InvocationFrom(lhs.Var!)))];
+    } else {
+      Body = Body.WithPrependedAssertionsIfAny(original.LHSs.Select(lhs => lhs.Var!.ToProtectAssertion()));
+    }
   }
   public override LetExpr WithProtections(Protector protector) => new(protector, this);
 }

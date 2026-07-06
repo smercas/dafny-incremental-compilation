@@ -92,7 +92,10 @@ public class VarDeclStmt : Statement, ICloneable<VarDeclStmt>, ICanFormat {
 
   protected VarDeclStmt(Protector protector, VarDeclStmt original) : base(protector, original) {
     Locals = original.Locals.ConvertAll(l => l.WithProtections(protector));
-    Assign = original.Assign?.WithProtections(protector);
+    Assign = original.Assign switch {
+      AssignSuchThatStmt assignSuchThatStmt => assignSuchThatStmt.WithProtections(protector, true),
+      _ => original.Assign?.WithProtections(protector),
+    };
   }
   public override VarDeclStmt WithProtections(Protector protector) => new(protector, this);
 }

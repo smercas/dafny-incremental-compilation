@@ -135,9 +135,13 @@ public class AssignSuchThatStmt : ConcreteAssignStatement, ICloneable<AssignSuch
     }
   }
 
-  protected AssignSuchThatStmt(Protector protector, AssignSuchThatStmt original) : base(protector, original) {
+  protected AssignSuchThatStmt(Protector protector, AssignSuchThatStmt original, bool inVarDecl) : base(protector, original) {
     Expr = original.Expr.WithProtections(protector);
+    if (inVarDecl) {
+      Expr = Expr.WithPrependedExpressions(Lhss.Select(ProtectorFunctions.NewProtect.InvocationFrom));
+    }
     AssumeToken = protector.Clone(original.AssumeToken);
   }
-  public override AssignSuchThatStmt WithProtections(Protector protector) => new(protector, this);
+  public override AssignSuchThatStmt WithProtections(Protector protector) => WithProtections(protector, false);
+  public AssignSuchThatStmt WithProtections(Protector protector, bool inVarDecl) => new(protector, this, inVarDecl);
 }

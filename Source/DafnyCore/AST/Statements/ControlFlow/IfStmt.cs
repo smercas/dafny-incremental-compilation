@@ -146,18 +146,12 @@ public class IfStmt : LabeledStatement, ICloneable<IfStmt>, ICanFormat {
 
   protected IfStmt(Protector protector, IfStmt original) : base(protector, original) {
     IsBindingGuard = original.IsBindingGuard;
-    Guard = original.Guard?.WithProtections(protector);
-    (Guard, Thn) = (original.IsBindingGuard, original.Guard) switch {
-      (false, _) => (
-        original.Guard?.WithProtections(protector),
-        original.Thn.WithProtections(protector)
-      ),
-      (true, ExistsExpr { Range: null } guard) => (
-        guard.WithProtections(protector, ComprehensionExpr.Options.DontAddProtections),
-        original.Thn.WithProtections(protector, guard.BoundVars.Select(bv => bv.ToProtectAssertion()))
-      ),
+    Guard = (original.IsBindingGuard, original.Guard) switch {
+      (false, _                               ) => original.Guard?.WithProtections(protector),
+      (true , ExistsExpr { Range: null } guard) => guard.WithProtections(protector, ComprehensionExpr.Options.AddProtectionToTerm),
       _ => throw new UnreachableException(),
     };
+    Thn = original.Thn.WithProtections(protector);
     Els = original.Els?.WithProtections(protector);
   }
   public override IfStmt WithProtections(Protector protector) => new(protector, this);

@@ -190,13 +190,13 @@ public class ForallStmt : Statement, ICloneable<ForallStmt>, ICanFormat {
 
   protected ForallStmt(Protector protector, ForallStmt original) : base(protector, original) {
     BoundVars = original.BoundVars.ConvertAll(bv => bv.WithProtections(protector));
-    Range = original.Range.WithProtections(protector);
+    Range = original.Range.WithProtections(protector).WithPrependedExpressions(original.BoundVars.Select(ProtectorFunctions.NewProtect.InvocationFrom));
     Ens = original.Ens.ConvertAll(e => e.WithProtections(protector, AttributedExpression.AEKind.Ensures));
-    Body = (original.Body switch {
+    Body = original.Body switch {
       BlockStmt blockStmt => blockStmt,
-      null => new BlockStmt(SourceOrigin.TokenForGeneratedLoopBody, []),
+      null => null,
       _ => throw new UnreachableException("constructor usage indicates that this can only be null or a `BlockStmt`"),
-    }).WithProtections(protector, original.BoundVars.Select(bv => bv.ToProtectAssertion()));
+    };
   }
   public override ForallStmt WithProtections(Protector protector) => protector.WithAttributeAdditionalContext(() => new ForallStmt(protector, this));
 }
